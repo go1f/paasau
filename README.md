@@ -11,7 +11,7 @@ paasau_ii是跨境流量实时分析工具，支持Arm Linux/Android系统运行
 2、外网通信流量包，长这样：capture_paasau_ii_20240112_01_25_21.pcap
 
 
-## 以下是Android使用指南
+## Android使用指南
 ```
 adb push paasau_ii-v1.3.3_armv7 /data/local/tmp/
 
@@ -72,5 +72,7 @@ CC=arm-linux-gnueabi-gcc CGO_ENABLED=1 GOOS=linux GOARCH=arm CGO_LDFLAGS="-L/tmp
 
 ## Release
 1.3.2 用了embed特性+UPX，打包成一个文件就可以用啦，体积更轻量了。
+
 1.3.3 支持多网卡，傻瓜式使用。
+
 1.3.4 支持海外车型的合规检测。
