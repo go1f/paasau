@@ -14,6 +14,7 @@ import (
 	"flag"
 	"strings"
 	"runtime"
+	// "path/filepath"
 	// "sync"
 	"github.com/google/gopacket"
 	"github.com/google/gopacket/layers"
@@ -32,6 +33,10 @@ var(
 	geoIP2CNReader *GeoIP2CNReader
 	foreignFlag bool
 	interfaceFlag string
+	savePcapFlag bool
+	findProcessFlag bool
+	outputDir string
+
 	// normalIPs map[string]bool
 )
 
@@ -48,7 +53,7 @@ func init() {
 
 func main() {
 
-	programName = "paasau_ii"
+	programName = "paasau"
 
 	setUsage()
 
@@ -65,8 +70,14 @@ func start(){
 
 	geoIP2CNReader, _ = newGeoIP2CNReader()
 
+
+	// executablePath, err := os.Executable()
+	// executableDir = filepath.Dir(executablePath)
+	// print(executableDir)
+
+
 	// 初始化日志
-	logFs, err := os.Create(fmt.Sprintf("result_%v_%v.log", programName, timeString))
+	logFs, err := os.Create(outputDir+fmt.Sprintf("result_%v_%v.log", programName, timeString))
 	if err != nil {
 		log.Fatalf("Log file create: %v", err)
 	}
@@ -116,9 +127,12 @@ func setUsage() {
 	// var backgroundFlag bool
 	flag.BoolVar(&helpFlag, "h", false, "帮助信息. Show help information.")
 	// flag.BoolVar(&backgroundFlag, "b", false, "后台运行. Run background.")
-	flag.StringVar(&interfaceFlag, "i", "", "-i eth0,wlan0 指定网卡. Specify the network interface")
 	//默认检测国内车型
 	flag.BoolVar(&foreignFlag, "foreign", false, "切换为国外车型的跨境合规检测. Declare this is foreigen car.")
+	flag.BoolVar(&savePcapFlag, "save", false, "使能本地保存Pcap流量包(存储空间消耗大).")
+	flag.StringVar(&outputDir, "o", "", "指定日志、流量包的保存目录(默认为当前执行路径目录).")	
+	flag.BoolVar(&findProcessFlag, "who", false, "使能查找违规IP通信的进程(性能消耗大).")
+	flag.StringVar(&interfaceFlag, "i", "", "-i eth0,wlan0 指定网卡. Specify the network interface")
 
 	// 解析命令行参数
 	flag.Parse()
@@ -128,6 +142,10 @@ func setUsage() {
 	if helpFlag {
 		flag.Usage()
 		os.Exit(0)
+	}
+
+	if len(outputDir) > 0 {
+		outputDir = outputDir + "/"
 	}
 
 	if foreignFlag == false {
@@ -163,11 +181,8 @@ func setUsage() {
 	// 	// fmt.Println("Process ID:", cmd.Process.Pid)
 	// 	// os.Exit(0)
 	// }
-
-
-
-
 }
+
 
 func getInterfaces() []string {
 	var IfaceNames []string
@@ -211,22 +226,25 @@ func capture(ifaceName string){
 	if err != nil {
 		log.Fatalf("OpenLive: %v",err)
 	}
-
-	// 保存文件
-	timeString := time.Now().Format("060102_1504_05")
-	fileName := fmt.Sprintf("capture_%v_%v_%v.pcap", programName, ifaceName, timeString)
-	pcapFile, err := os.Create(fileName)
-	if err != nil {
-		log.Fatalf("pcap, os.Create: %v", err)
-	}
-
-	pcapWriter := pcapgo.NewWriter(pcapFile)
-	if err := pcapWriter.WriteFileHeader(65536, layers.LinkTypeEthernet); err != nil {
-		log.Fatalf("pcapWriter.WriteFileHeader: %v", err)
-	}
-
 	defer handle.Close()
-	defer pcapFile.Close()
+
+	var pcapWriter *pcapgo.Writer
+	// 保存文件
+	if savePcapFlag {
+		timeString := time.Now().Format("060102_1504_05")
+		fileName := fmt.Sprintf("capture_%v_%v_%v.pcap", programName, ifaceName, timeString)
+		pcapFile, err := os.Create(outputDir+fileName)
+		if err != nil {
+			log.Fatalf("pcap, os.Create: %v", err)
+		}
+
+		pcapWriter = pcapgo.NewWriter(pcapFile)
+		if err := pcapWriter.WriteFileHeader(65536, layers.LinkTypeEthernet); err != nil {
+			log.Fatalf("pcapWriter.WriteFileHeader: %v", err)
+		}
+
+		defer pcapFile.Close()
+	}
 
 	// 设置过滤器
 	err = handle.SetBPFFilter("not ((dst net 192.168.0.0/16 or dst net 172.16.0.0/12 or dst net 10.0.0.0/8 or dst net 255.255.255.255 or dst net 169.254.0.0/16 or dst net 224.0.0.0/4 or dst net 127.0.0.0/8) and (src net 192.168.0.0/16 or src net 172.16.0.0/12 or src net 10.0.0.0/8 or src net 169.254.0.0/16 or src net 127.0.0.0/8))")
@@ -237,9 +255,12 @@ func capture(ifaceName string){
 	// 开始抓包
 	packetSource := gopacket.NewPacketSource(handle, handle.LinkType())
 	for packet := range packetSource.Packets() {
+		if pcapWriter != nil {
 		// 保存
-		if err := pcapWriter.WritePacket(packet.Metadata().CaptureInfo, packet.Data()); err != nil {
-			log.Fatalf("pcap.WritePacket: %v", err)
+			err := pcapWriter.WritePacket(packet.Metadata().CaptureInfo, packet.Data())
+			if err != nil {
+				log.Fatalf("pcap.WritePacket: %v", err)
+			}
 		}
 		// print(1)
 		go prasePacket(packet)
@@ -270,8 +291,10 @@ func prasePacket(packet gopacket.Packet) {
 
 		log.Printf("Found Violation IP: %s\n", dstIP)
 
-		// 查找发起连接的进程
-		findProcess(dstIP)
+		if findProcessFlag {
+			// 查找发起连接的进程
+			findProcess(dstIP)	
+		}
 		
 	}
 }
@@ -323,34 +346,12 @@ func checkViolationIP(ip string) bool {
 	if netIP.IsPrivate() || netIP.IsLoopback() || netIP.IsMulticast() || 
 	netIP.IsLinkLocalUnicast() || netIP.IsUnspecified() || ip=="255.255.255.255" {
 		// fmt.Printf("Skip Src IP: %s.\n", sip)
+		// fmt.Printf("Skip localnetwork IP: %s\n", ip)
 		return true
 	}
 
-	// db, err := geoip2.FromBytes(geoipBytes) 
-	// if err != nil {
-	// 	log.Fatal(err)
-	// }
-	// defer db.Close()
-	
-	// record1, err := db.Country(netIP)
-	// if err != nil {
-	// 	log.Println(err)
-	// }
-
-	// 判断目的地址是否合规
-	// if foreignFlag == false{
-	// 	//国内车型中国境内IP则合规
-	// 	if record1.Country.Names["en"] == "China" {
-	// 		fmt.Printf("Skip CN Dst IP: %s\n", dip)
-	// 		return true
-	// }} else{
-	// 	//国外车型国外IP则合规
-	// 	if record1.Country.Names["en"] != "China" {
-	// 		fmt.Printf("Skip Foreign Dst IP: %s\n", dip)
-	// 		return true
-	// }}
-
 	// if record1.Country.Names["en"] == "China"{
+	// 复用对象，减少资源消耗
 	if geoIP2CNReader.isChinaIP(netIP){
 		//中国IP && 国内车型 = 合规
 		if foreignFlag == false{
