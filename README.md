@@ -48,7 +48,7 @@ make
 export PCAPV=1.10.4
 export PATH=$PATH:/usr/local/go/bin
 
-CC=aarch64-linux-gnu-gcc CGO_ENABLED=1 GOOS=linux GOARCH=armv7 CGO_LDFLAGS="-L/tmp/libpcap-$PCAPV -static" go build -o paasau-v1.3.3-arm64 paasau-v1.3.3.go 
+CC=aarch64-linux-gnu-gcc CGO_ENABLED=1 GOOS=linux GOARCH=arm64 CGO_LDFLAGS="-L/tmp/libpcap-$PCAPV -static" go build -o paasau-v1.3.3-arm64 paasau-v1.3.3.go 
 ```
 
 ## 交叉编译arm v7
@@ -125,5 +125,12 @@ CC=arm-linux-gnueabi-gcc CGO_ENABLED=1 GOOS=linux GOARCH=arm CGO_LDFLAGS="-L/tmp
 1.3.4 支持海外回境的合规检测。
 
 1.3.8 设置CPU上限；优化了变量命名；对象复用，改善了一点点理论性能；强制使用中国上海时区GMT 8:00；改善程序退出机制。
+
+
+## 致谢
+
+[Hackl0us](https://github.com/Hackl0us) [GeoIP2-CN ](https://github.com/Hackl0us/GeoIP2-CN)，轻量漂亮的IP数据库
+
+rfyiamcool [go-netflow](https://github.com/rfyiamcool/go-netflow) ，Go入门参考
 
 
