@@ -4,12 +4,14 @@ paasau是跨境流量合规检测工具，接近实时查找连接进程，支�
 
 将paasau放到一个可写的目录，即可运行。
 ```
-./paasau-v1.3.3_armv7
+#国内车型
+./paasau -i eth0,wlan0 -who -save
+#国外车型
+./paasau -i eth0,wlan0 -who -save -foreign
 ```
-若当前机器存在跨境IP的通信，会在终端输出跨境IP及通信进程信息，并输出文件：
+若当前机器存在跨境IP的通信，会在终端输出跨境IP及通信进程信息，并输出文件到当前目录：
 
 1、跨境告警的日志，长这样：result_paasau_20240112_01_25_21.log
-
 2、外网通信流量包，长这样：traffic_paasau_20240112_01_25_21.pcap
 
 
