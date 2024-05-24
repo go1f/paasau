@@ -8,14 +8,13 @@ import (
 	"net"
 	"io"
 	"os"
-	// "os/exec"
 	"os/signal"
 	"syscall"
 	"flag"
 	"strings"
 	"runtime"
-	// "path/filepath"
-	// "sync"
+	"sync"
+	"context"
 	"github.com/google/gopacket"
 	"github.com/google/gopacket/layers"
 	"github.com/google/gopacket/pcap"
@@ -24,11 +23,14 @@ import (
 	"github.com/shirou/gopsutil/process"
 )
 
+const violationIPTimeout = 4 * time.Second // 3秒超时时间
+const maxGoroutineNum = 3
 
 var(
-	programName string
-	//geoipBytes []byte
-	//go:embed GeoIP2-CN-20240421.mmdb
+	programName = "paasau"
+	Version = "V16"
+	databaseVersion = "GeoIP2-CN-20240523"
+	//go:embed GeoIP2-CN-20240523.mmdb
 	staticFiles embed.FS
 	geoIP2CNReader *GeoIP2CNReader
 	foreignFlag bool
@@ -37,8 +39,116 @@ var(
 	findProcessFlag bool
 	outputDir string
 
-	// normalIPs map[string]bool
+	workerPool *WorkerPool
+	violationIPStack *ViolationIPStack
+
 )
+
+type ViolationIPEntry struct {
+    IP         string
+    EnqueuedAt time.Time
+}
+
+type ViolationIPStack struct {
+    entries []ViolationIPEntry
+    timeout time.Duration
+    mutex   sync.Mutex
+}
+
+func NewViolationIPStack(timeout time.Duration) *ViolationIPStack {
+    return &ViolationIPStack{
+        entries: make([]ViolationIPEntry, 0),
+        timeout: timeout,
+    }
+}
+
+func (s *ViolationIPStack) Push(ip string) {
+    s.mutex.Lock()
+    defer s.mutex.Unlock()
+
+    s.entries = append(s.entries, ViolationIPEntry{
+        IP:         ip,
+        EnqueuedAt: time.Now(),
+    })
+}
+
+func (s *ViolationIPStack) Pop() string {
+    s.mutex.Lock()
+    defer s.mutex.Unlock()
+
+    s.removeExpired()
+
+    if len(s.entries) == 0 {
+        return ""
+    }
+
+    ip := s.entries[len(s.entries)-1].IP
+    s.entries = s.entries[:len(s.entries)-1]
+    return ip
+}
+
+func (s *ViolationIPStack) removeExpired() {
+    now := time.Now()
+    validCount := 0
+
+    for _, entry := range s.entries {
+        if now.Sub(entry.EnqueuedAt) < s.timeout {
+            s.entries[validCount] = entry
+            validCount++
+        }
+    }
+
+    s.entries = s.entries[:validCount]
+}
+
+
+
+type WorkerPool struct {
+    workersNum int           // 工作goroutine数量
+    jobChan    chan Job      // 作业队列
+    // jobQueue   *ViolationIPQueue
+    jobStack   *ViolationIPStack
+    wg         sync.WaitGroup  // 等待组,用于确保所有作业完成
+}
+
+type Job struct {
+    IP string
+}
+
+func NewWorkerPool(maxWorkers int) *WorkerPool {
+    return &WorkerPool{
+        workersNum: maxWorkers,
+        jobChan:    make(chan Job, 1000), // 设置合理的缓冲区大小
+        // jobQueue:   NewViolationIPQueue(violationIPTimeout),
+        jobStack:   violationIPStack, // 使用全局的violationIPStack实例
+    }
+}
+
+func (wp *WorkerPool) AddJobWithTimeout(ip string) {
+    wp.jobStack.Push(ip)
+}
+
+func (wp *WorkerPool) Run() {
+    for i := 0; i < wp.workersNum; i++ {
+        wp.wg.Add(1)
+        go wp.worker()
+    }
+    wp.wg.Wait()
+    close(wp.jobChan)
+}
+
+func (wp *WorkerPool) worker() {
+    defer wp.wg.Done()
+
+    for {
+	    // ip := wp.jobQueue.Dequeue()
+	    ip := wp.jobStack.Pop()
+	    if ip != "" {
+	        findProcess(ip)
+	    } 
+    }
+
+}
 
 
 func init() {
@@ -53,8 +163,6 @@ func init() {
 
 func main() {
 
-	programName = "paasau"
-
 	setUsage()
 
 	start()
@@ -62,18 +170,17 @@ func main() {
 }
 
 func start(){
+
+	ctx, cancel := context.WithCancel(context.Background())
+    defer cancel() // 确保在主goroutine退出时取消上下文
+
 	var err error
 
 	timeString := time.Now().Format("060102_150405")
 
-	runtime.GOMAXPROCS(4)
+	runtime.GOMAXPROCS(2)
 
 	geoIP2CNReader, _ = newGeoIP2CNReader()
-
-
-	// executablePath, err := os.Executable()
-	// executableDir = filepath.Dir(executablePath)
-	// print(executableDir)
 
 
 	// 初始化日志
@@ -86,23 +193,29 @@ func start(){
 	// 设置日志输出到终端和文件
 	log.SetOutput(io.MultiWriter(os.Stdout, logFs))
 
-	// normalIPs = make(map[string]bool)
-
 	// 提取网卡名
 	interfaces := getInterfaces()
 
+	violationIPStack = NewViolationIPStack(violationIPTimeout)
+
+	workerPool = NewWorkerPool(maxGoroutineNum) // 设置合理的工作goroutine数量
+    defer workerPool.Run()
+
+    go workerPool.Run()
+
 	for _, iface := range interfaces {
 		
-		go capture(iface)
+		go capture(iface, ctx)
 
 	}
 
 
-
+	// waitExit(ctx, cancel)
 	waitExit()
 }
 
 
+// func waitExit(ctx context.Context, cancel context.CancelFunc){
 func waitExit(){
 	// 捕获 Ctrl+C 信号
 	c := make(chan os.Signal, 1)
@@ -112,12 +225,20 @@ func waitExit(){
 	//等待信号
 	<-c
 
-	// time.Sleep(3 * time.Second)
 
 	// fmt.Println("Start stopping violation detection...")
+	if geoIP2CNReader != nil {
+        geoIP2CNReader.reader.Close()
+    }
 
-	fmt.Println("Byebye...")
+    // cancel()
+
 	fmt.Println()
+	fmt.Println("Byebye...")
+	os.Exit(0)
+
+	// return
+	
 }
 
 
@@ -149,38 +270,18 @@ func setUsage() {
 	}
 
 	if foreignFlag == false {
+		fmt.Printf("%s-%s, databaseVersion:%s\n", programName, Version, databaseVersion)
 		fmt.Println("默认检测国内车型IP合规. 可使用 -h 参数获取帮助详情.")
-		fmt.Println("IP compliance detection of China models by default. Please use the -h parameter to get more help.")
+		fmt.Println("IP compliance detection of China models by default. ")
+		fmt.Println("Please use the -h parameter to get more details.")
 	} else{
 		fmt.Println("脚本正在检测国外车型IP合规.")
 		fmt.Println("Now checking IP compliance of foreign models.")
 	}
 
-	// if backgroundFlag {
-	// 	_, err := syscall.Setsid()
-	// 	if err != nil {
-	// 		fmt.Println("切换为后台运行失败:", err)
-	// 		os.Exit(1)
-	// 	}
 
-	// 	// args := strings.Join(os.Args, " ")
-	// 	// args = strings.Replace(args, " -b", "", -1)
-	// 	// fmt.Println(args)
+	time.Sleep(2 * time.Second)
 
-	// 	// cmd := exec.Command(args)
-	// 	// cmd.SysProcAttr = &syscall.SysProcAttr{
-	// 	// 	Setsid: true,
-	// 	// }
-
-	// 	// err := cmd.Start()
-	// 	// if err != nil {
-	// 	// 	log.Fatal("Failed to start process:", err)
-	// 	// 	// return
-	// 	// }
-
-	// 	// fmt.Println("Process ID:", cmd.Process.Pid)
-	// 	// os.Exit(0)
-	// }
 }
 
 
@@ -199,14 +300,12 @@ func getInterfaces() []string {
 		// var IfaceNames []string
 		for _, iface := range interfaces {
 			// fmt.Println(iface.Name)
-
 			// 筛选UP状态的网卡
 			// syscall.IFF_UP, syscall.IFF_RUNNING refer:https://go.dev/src/net/interface_linux.go
 			if iface.Flags & syscall.IFF_UP != 0 {
 				//去掉环回地址lo网卡
 				if strings.HasPrefix(iface.Name, "lo") == false {
 					IfaceNames = append(IfaceNames, iface.Name)
-
 				}
 			}
 			
@@ -216,15 +315,15 @@ func getInterfaces() []string {
 	return IfaceNames
 }
 
-func capture(ifaceName string){
-
+func capture(ifaceName string, ctx context.Context){
 	fmt.Println("开启 " + ifaceName + " 网卡抓包。")
-
 
 	// 打开网络设备
 	handle, err := pcap.OpenLive(ifaceName, 65536, true, pcap.BlockForever)
 	if err != nil {
-		log.Fatalf("OpenLive: %v",err)
+		// 打开失败不退出程序
+		fmt.Printf("OpenLive: %v\n",err)
+		return
 	}
 	defer handle.Close()
 
@@ -247,7 +346,7 @@ func capture(ifaceName string){
 	}
 
 	// 设置过滤器
-	err = handle.SetBPFFilter("not ((dst net 192.168.0.0/16 or dst net 172.16.0.0/12 or dst net 10.0.0.0/8 or dst net 255.255.255.255 or dst net 169.254.0.0/16 or dst net 224.0.0.0/4 or dst net 127.0.0.0/8) and (src net 192.168.0.0/16 or src net 172.16.0.0/12 or src net 10.0.0.0/8 or src net 169.254.0.0/16 or src net 127.0.0.0/8))")
+	err = handle.SetBPFFilter("ip and not ((dst net 192.168.0.0/16 or dst net 172.16.0.0/12 or dst net 10.0.0.0/8 or dst net 255.255.255.255 or dst net 169.254.0.0/16 or dst net 224.0.0.0/4 or dst net 127.0.0.0/8) and (src net 192.168.0.0/16 or src net 172.16.0.0/12 or src net 10.0.0.0/8 or src net 169.254.0.0/16 or src net 127.0.0.0/8))")
 	if err != nil {
 		log.Fatal("SetBPFFilter: %v",err)
 	}
@@ -255,15 +354,26 @@ func capture(ifaceName string){
 	// 开始抓包
 	packetSource := gopacket.NewPacketSource(handle, handle.LinkType())
 	for packet := range packetSource.Packets() {
-		if pcapWriter != nil {
-		// 保存
-			err := pcapWriter.WritePacket(packet.Metadata().CaptureInfo, packet.Data())
-			if err != nil {
-				log.Fatalf("pcap.WritePacket: %v", err)
+		select {
+        
+        case <-ctx.Done():
+            // 上下文被取消,做一些清理工作并退出goroutine
+            // cleanupCapture()
+            return
+        
+        default:
+            // 正常捕获数据包的循环
+            if pcapWriter != nil {
+			// 保存
+				err := pcapWriter.WritePacket(packet.Metadata().CaptureInfo, packet.Data())
+				if err != nil {
+					log.Fatalf("pcap.WritePacket: %v", err)
+				}
 			}
-		}
-		// print(1)
-		go prasePacket(packet)
+			// print(1)
+
+			go prasePacket(packet)
+        }	
 	}
 }
 
@@ -293,7 +403,9 @@ func prasePacket(packet gopacket.Packet) {
 
 		if findProcessFlag {
 			// 查找发起连接的进程
-			findProcess(dstIP)	
+			// workerPool.AddJob(dstIP)
+			workerPool.AddJobWithTimeout(dstIP)
+			// findProcess(dstIP)	
 		}
 		
 	}
@@ -302,13 +414,14 @@ func prasePacket(packet gopacket.Packet) {
 
 type GeoIP2CNReader struct {
 	reader	*geoip2.Reader
+	countryMap sync.Map // 使用sync.Map代替ipCountryMap和mutex
 	// lock	sync.Mutex
 }
 
 func newGeoIP2CNReader() (*GeoIP2CNReader, error){
 
 	// 初始化IP MMDB数据库
-	bytes, err := staticFiles.ReadFile("GeoIP2-CN-20240421.mmdb")
+	bytes, err := staticFiles.ReadFile("GeoIP2-CN-20240523.mmdb")
 	if err != nil {
 		log.Fatal("Failed to read MMDB:", err)
 	}
@@ -321,22 +434,33 @@ func newGeoIP2CNReader() (*GeoIP2CNReader, error){
 
 	return &GeoIP2CNReader{
 		reader: reader,
+		countryMap: sync.Map{}, // 初始化sync.Map
 	}, err
 }
 
-func (rd *GeoIP2CNReader) isChinaIP(netIP net.IP) bool {
-	// rd.lock.Lock()
-	// defer rd.lock.Unlock()
+func (rd *GeoIP2CNReader) isChinaIP(ip string) bool {
 
-	country, err := rd.reader.Country(netIP)
+	// 检查IP是否已经解析过
+	if country, ok := rd.countryMap.Load(ip); ok {
+		return country.(string) == "CN"
+	}
+
+	record, err := rd.reader.Country(net.ParseIP(ip))
 	if err != nil {
 		log.Println("rd.reader.Country: ", err)
 	}
+	
+	// 存储IP和国家码
+	// mutex.Lock()
+	// ipCountryMap[ip] = record.Country.IsoCode
+	// mutex.Unlock()
+	rd.countryMap.Store(ip, record.Country.IsoCode)
 
-	// fmt.Println(country.Country.Names["en"])
 
-	return country.Country.Names["en"] == "China"
+	return record.Country.IsoCode == "CN"
 }
+
+
 
 //True合规，False违规
 func checkViolationIP(ip string) bool {
@@ -350,9 +474,8 @@ func checkViolationIP(ip string) bool {
 		return true
 	}
 
-	// if record1.Country.Names["en"] == "China"{
 	// 复用对象，减少资源消耗
-	if geoIP2CNReader.isChinaIP(netIP){
+	if geoIP2CNReader.isChinaIP(ip){
 		//中国IP && 国内车型 = 合规
 		if foreignFlag == false{
 			fmt.Printf("Skip CN IP: %s\n", ip)
@@ -369,7 +492,6 @@ func checkViolationIP(ip string) bool {
 
 func findProcess(ip string) {
 	// 获取进程信息
-	// todo: SYN的包查不到进程，遍历查询太慢了
 	processes, _ := process.Processes()
 	for _, proc := range processes {
 		conns, _ := proc.Connections()
@@ -385,3 +507,5 @@ func findProcess(ip string) {
 		}
 	}
 }
+
+

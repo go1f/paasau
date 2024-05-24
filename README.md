@@ -2,17 +2,29 @@
 ## 介绍
 paasau是跨境流量合规检测工具，接近实时查找连接进程，支持Arm Linux/Android系统运行。
 
-将paasau放到一个可写的目录，即可运行。
 ```
+#paasau -h  
+Usage of paasau:
+	-foreign
+    	切换为国外车型的跨境合规检测. Declare this is foreigen car.
+  -h	帮助信息. Show help information.
+  -i string
+    	-i eth0,wlan0 指定网卡. Specify the network interface
+  -o string
+    	指定日志、流量包的保存目录(默认为当前执行路径目录).
+  -save
+    	使能本地保存Pcap流量包(存储空间消耗大).
+  -who
+    	使能查找违规IP通信的进程(性能消耗大).
+
 #国内车型
 ./paasau -i eth0,wlan0 -who -save
 #国外车型
 ./paasau -i eth0,wlan0 -who -save -foreign
 ```
-若当前机器存在跨境IP的通信，会在终端输出跨境IP及通信进程信息，并输出文件到当前目录：
+若当前机器存在跨境IP的通信，会在终端输出跨境IP及通信进程信息。
 
-1、跨境告警的日志，长这样：result_paasau_20240112_01_25_21.log
-2、外网通信流量包，长这样：traffic_paasau_20240112_01_25_21.pcap
+
 
 
 ## Android使用指南
@@ -103,6 +115,7 @@ apt install gcc-arm-linux-gnueabi g++-arm-linux-gnueabi flex bison -y
 
 ./configure --host=arm-linux-gnueabi --with-pcap=linux CC=arm-linux-gnueabi-gcc
 make
+cd ../
 
 
 wget https://dl.google.com/go/go1.22.2.linux-arm64.tar.gz
@@ -115,7 +128,7 @@ go version
 
 sudo apt install libpcap-dev -y
 
-CC=arm-linux-gnueabi-gcc CGO_ENABLED=1 GOOS=linux GOARCH=arm CGO_LDFLAGS="-L/tmp/libpcap-1.10.4 -static" go build -o paasau-armv7-v1.3.8 paasau-v1.3.8.go 
+CC=arm-linux-gnueabi-gcc CGO_ENABLED=1 GOOS=linux GOARCH=arm CGO_LDFLAGS="-L./libpcap-1.10.4 -static" go build -o paasau-armv7 paasau.go 
 
 ```
 
@@ -134,5 +147,4 @@ CC=arm-linux-gnueabi-gcc CGO_ENABLED=1 GOOS=linux GOARCH=arm CGO_LDFLAGS="-L/tmp
 [Hackl0us](https://github.com/Hackl0us) [GeoIP2-CN ](https://github.com/Hackl0us/GeoIP2-CN)，轻量漂亮的IP数据库
 
 rfyiamcool [go-netflow](https://github.com/rfyiamcool/go-netflow) ，Go入门参考
-
 
