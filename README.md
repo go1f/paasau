@@ -1,5 +1,4 @@
 # paasau
-## 介绍
 paasau是跨境流量合规检测工具，接近实时查找连接进程，支持Arm Linux/Android系统运行。
 
 ```
