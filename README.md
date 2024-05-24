@@ -4,7 +4,7 @@ paasau是跨境流量合规检测工具，接近实时查找连接进程，支�
 ```
 #paasau -h  
 Usage of paasau:
-	-foreign
+  -foreign
     	切换为国外车型的跨境合规检测. Declare this is foreigen car.
   -h	帮助信息. Show help information.
   -i string
@@ -28,14 +28,14 @@ Usage of paasau:
 
 ## Android使用指南
 ```
-adb push paasau-v1.3.3_armv7 /data/local/tmp/
+adb push paasau /data/local/tmp/
 
 adb shell
 su
-chmod +x /data/local/tmp/paasau-v1.3.3_armv7
+chmod +x /data/local/tmp/paasau
 cd /data/local/tmp
 # 挂后台运行
-nohup ./paasau-v1.3.3_armv7 -i eth0 &
+nohup ./paasau -i eth0 &
 
 # 持续观察有无跨境流量
 tail -f /data/local/tmp/nohup.out
@@ -61,7 +61,7 @@ make
 export PCAPV=1.10.4
 export PATH=$PATH:/usr/local/go/bin
 
-CC=aarch64-linux-gnu-gcc CGO_ENABLED=1 GOOS=linux GOARCH=arm64 CGO_LDFLAGS="-L/tmp/libpcap-$PCAPV -static" go build -o paasau-v1.3.3-arm64 paasau-v1.3.3.go 
+CC=aarch64-linux-gnu-gcc CGO_ENABLED=1 GOOS=linux GOARCH=arm64 CGO_LDFLAGS="-L/tmp/libpcap-$PCAPV -static" go build -o paasau-arm64 paasau.go 
 ```
 
 ## 交叉编译arm v7
@@ -80,7 +80,7 @@ make
 export PCAPV=1.10.4
 export PATH=$PATH:/usr/local/go/bin
 
-CC=arm-linux-gnueabi-gcc CGO_ENABLED=1 GOOS=linux GOARCH=arm CGO_LDFLAGS="-L/tmp/libpcap-$PCAPV -static" go build -o paasau-armv7-v1.3.3 paasau-v1.3.3.go
+CC=arm-linux-gnueabi-gcc CGO_ENABLED=1 GOOS=linux GOARCH=arm CGO_LDFLAGS="-L/tmp/libpcap-$PCAPV -static" go build -o paasau-armv7 paasau.go
 
 ```
 
@@ -139,6 +139,10 @@ CC=arm-linux-gnueabi-gcc CGO_ENABLED=1 GOOS=linux GOARCH=arm CGO_LDFLAGS="-L./li
 1.3.4 支持海外回境的合规检测。
 
 1.3.8 设置CPU上限；优化了变量命名；对象复用，改善了一点点理论性能；强制使用中国上海时区GMT 8:00；改善程序退出机制。
+
+15 增加一些选项开关。更新IP数据库。
+
+16 多线程优化。更新IP数据库。
 
 
 ## 致谢
