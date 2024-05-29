@@ -17,11 +17,14 @@ Usage of paasau:
     	使能查找违规IP通信的进程(性能消耗大).
 
 #国内车型
-./paasau -i eth0,wlan0 -who -save
+./paasau -who -save
 #国外车型
-./paasau -i eth0,wlan0 -who -save -foreign
+./paasau -who -save -foreign
 ```
 若当前机器存在跨境IP的通信，会在终端输出跨境IP及通信进程信息。
+
+日志文本命名格式为：result_paasau_240502_150405.log；
+流量包命名格式为：traffic_paasau_240502_150405.pcap。
 
 
 
