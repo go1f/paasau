@@ -34,7 +34,7 @@ var(
 	//go:embed GeoIP2-CN-20240804.mmdb
 	staticFiles embed.FS
 	activeSearches sync.Map
-    workerSemaphore = make(chan struct{}, 5) // 限制最多 5 个并发 worker
+    workerSemaphore = make(chan struct{}, 2) // 限制最多 5 个并发 worker
 	geoIP2CNReader *GeoIP2CNReader
 	foreignFlag bool
 	interfaceFlag string
@@ -62,6 +62,8 @@ func init() {
 	time.Local = time.FixedZone("GMT", 8*3600) 
 
 
+	initParam()
+
 	// 初始化日志
 	// 切换debug模式
     initLoggers(debug)
@@ -72,7 +74,6 @@ func init() {
 func main() {
 
 
-	setUsage()
 
 	start()
 
@@ -82,6 +83,9 @@ func start(){
 
 	// runtime.GOMAXPROCS(2)
 
+
+
+    
 	geoIP2CNReader, _ = newGeoIP2CNReader()
 
 
@@ -149,7 +153,7 @@ func initLoggers(debug bool) {
 
 }
 
-func setUsage() {
+func initParam() {
 
 	var helpFlag bool
 	var processNameFlag string
@@ -445,7 +449,7 @@ func findProcessWorker(ctx context.Context, ip string) {
 
 			select {
 	            case <-ctx.Done():
-	                resultCh <- fmt.Sprintf("Miss process matched (Overtime): %s", ip)
+	                // resultCh <- fmt.Sprintf("Miss process matched (Overtime): %s", ip)
 	                return
 	            default:
                 // 继续执行

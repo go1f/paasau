@@ -92,52 +92,56 @@ paasau_offline.exe pcap240701.pcap
 
 
 
-
-
-## 交叉编译arm64
+## 交叉编译ARM64
 ```
 wget https://dl.google.com/go/go1.20.5.linux-amd64.tar.gz
 sudo tar -xvf go1.20.5.linux-amd64.tar.gz
 export GOROOT=/usr/local/go
 
-cd /tmp
 export PCAPV=1.10.4
 wget http://www.tcpdump.org/release/libpcap-$PCAPV.tar.gz
-tar -zxvf libpcap-$PCAPV.tar.gz
-cd libpcap-$PCAPV
+mkdir aarch64
+tar -zxvf libpcap-$PCAPV.tar.gz -C aarch64
+cd aarch64/libpcap-$PCAPV
 export CC=aarch64-linux-gnu-gcc
-./configure --host=aarch64-linux --with-pcap=linux
+./configure --host=aarch64-linux --with-pcap=linux --disable-dbus
 make
-
+cd ../../
 
 export PCAPV=1.10.4
 export PATH=$PATH:/usr/local/go/bin
+CC=aarch64-linux-gnu-gcc CGO_ENABLED=1 GOOS=linux GOARCH=arm64 CGO_LDFLAGS="-L./aarch64/libpcap-$PCAPV -static" go build -o paasau_aarch64 paasau.go
 
-CC=aarch64-linux-gnu-gcc CGO_ENABLED=1 GOOS=linux GOARCH=arm64 CGO_LDFLAGS="-L/tmp/libpcap-$PCAPV -static" go build -o paasau-v1.3.3-arm64 paasau-v1.3.3.go 
+upx paasau_aarch64
 ```
 
-## 交叉编译arm v7
+## 交叉编译ARMv7
 ```
 cd /tmp
 export PCAPV=1.10.4
 wget http://www.tcpdump.org/release/libpcap-$PCAPV.tar.gz
-tar -zxvf libpcap-$PCAPV.tar.gz
-cd libpcap-$PCAPV
+mkdir armv7
+tar -zxvf libpcap-$PCAPV.tar.gz -C armv7
+cd armv7/libpcap-$PCAPV
 apt install gcc-arm-linux-gnueabi g++-arm-linux-gnueabi
 
 export CC=arm-linux-gnueabi-gcc
-./configure --host=arm-linux-gnueabi --with-pcap=linux
+./configure --host=arm-linux-gnueabi --with-pcap=linux --disable-dbus
 make
+cd ../../
 
 export PCAPV=1.10.4
 export PATH=$PATH:/usr/local/go/bin
 
-CC=arm-linux-gnueabi-gcc CGO_ENABLED=1 GOOS=linux GOARCH=arm CGO_LDFLAGS="-L/tmp/libpcap-$PCAPV -static" go build -o paasau-armv7-v1.3.3 paasau-v1.3.3.go
+CC=arm-linux-gnueabi-gcc CGO_ENABLED=1 GOOS=linux GOARCH=arm CGO_LDFLAGS="-L./armv7/libpcap-$PCAPV -static" go build -o paasau_aarch64 paasau.go
 
+upx paasau_aarch64
 ```
 
-## macOS交叉编译arm v7
+## MacOS交叉编译ARMv7
 ```
+cd paasau
+
 brew install orb
 
 orb
@@ -153,20 +157,19 @@ deb http://ports.ubuntu.com/ubuntu-ports/ jammy-security main restricted univers
 # deb-src http://ports.ubuntu.com/ubuntu-ports/ jammy-security main restricted universe multiverse
 EOF"
 
+sudo apt install build-essential upx -y
 
-sudo apt install build-essential -y
-
-cd /tmp
 export PCAPV=1.10.4
 wget http://www.tcpdump.org/release/libpcap-$PCAPV.tar.gz
-tar -zxvf libpcap-$PCAPV.tar.gz
-cd libpcap-$PCAPV
+tar -zxvf libpcap-$PCAPV.tar.gz -C armv7
 
-apt install gcc-arm-linux-gnueabi g++-arm-linux-gnueabi flex bison -y
+cd armv7/libpcap-$PCAPV
 
-./configure --host=arm-linux-gnueabi --with-pcap=linux CC=arm-linux-gnueabi-gcc
+sudo apt install gcc-arm-linux-gnueabi g++-arm-linux-gnueabi flex bison -y
+
+./configure --host=arm-linux-gnueabi --with-pcap=linux CC=arm-linux-gnueabi-gcc --disable-dbus
 make
-cd ../
+cd ../../
 
 
 wget https://dl.google.com/go/go1.22.2.linux-arm64.tar.gz
@@ -179,23 +182,17 @@ go version
 
 sudo apt install libpcap-dev -y
 
-CC=arm-linux-gnueabi-gcc CGO_ENABLED=1 GOOS=linux GOARCH=arm CGO_LDFLAGS="-L./libpcap-1.10.4 -static" go build -o paasau-armv7 paasau.go 
+CC=arm-linux-gnueabi-gcc CGO_ENABLED=1 GOOS=linux GOARCH=arm CGO_LDFLAGS="-L./armv7/libpcap-1.10.4 -static" go build -o paasau_armv7 paasau.go 
 
+upx paasau_armv7
 ```
 
-## Release
-1.3.2 用了embed特性，打包成一个文件就可以用啦，体积更轻量了。
 
-1.3.3 支持多网卡，傻瓜式使用。
 
-1.3.4 支持海外回境的合规检测。
 
-1.3.8 设置CPU上限；优化了变量命名；对象复用，改善了一点点理论性能；强制使用中国上海时区GMT 8:00；改善程序退出机制。
 
 
 ## 致谢
 
 [Hackl0us](https://github.com/Hackl0us) [GeoIP2-CN ](https://github.com/Hackl0us/GeoIP2-CN)，轻量漂亮的IP数据库
-
-rfyiamcool [go-netflow](https://github.com/rfyiamcool/go-netflow) ，Go入门参考
 
