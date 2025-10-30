@@ -2,26 +2,24 @@
 paasau是跨境流量合规检测工具，接近实时查找连接进程，支持Arm Linux/Android系统运行。
 
 ```
-#paasau -h
+#paasau -h  
 Usage of paasau:
+  -h        帮助信息. Show help information.
   --foreign
             切换为国外车型的跨境合规检测. Declare this is foreigen car.
-  -h        帮助信息. Show help information.
   -i string
             -i eth0,wlan0 指定网卡，默认抓取所有Open网卡. Specify the network interface
   -o string
             指定日志、流量包的保存目录(默认为当前执行路径目录).
-  -pn string
-            -pn <processName>. 仅检查指定的进程(支持正则匹配). Specify the process name
+  --pn string
+            --pn <processName>. 仅检查指定的进程(支持正则匹配). Specify the process name
   --save
             使能本地保存Pcap流量包(存储空间消耗大).
   --who
             使能查找违规IP通信的进程(性能消耗大).
+  --db string
+            --db <path_to_mmdb>. 指定IP数据库. Specify the mmdb IP databse            
 
-#国内车型
-/path/to/paasau -i eth0,wlan0 -who -save
-#国外车型
-/path/to/paasau -i eth0,wlan0 -who -save -foreign
 ```
 若当前机器存在跨境IP的通信，会在终端输出跨境IP及通信进程信息。
 
@@ -42,27 +40,32 @@ adb push paasau /data/local/tmp/paasau/paasau
 
 ```Bash
 adb root
+mkdir /data/local/tmp/paasau
+chmod +x /data/local/tmp/paasau/paasau
+
+/data/local/tmp/paasau/paasau --who --save -o /data/local/tmp/paasau/
+
+###以下命令用于台架冒烟自动化
+adb root
 adb shell "chmod +x /data/local/tmp/paasau/paasau"
 
-#国内车型
-adb shell  "nohup /data/local/tmp/paasau/paasau --who --save -o /data/local/tmp/paasau/ > /dev/null 2>&1 &"
+#冒烟：国内车型
+adb shell  "nohup /data/local/tmp/paasau/paasau --who --save -o /data/local/tmp/paasau/ >/dev/null 2>&1 &"
 
-#国外车型，国外车型需使用-foreign参数
-adb shell "nohup /data/local/tmp/paasau/paasau --foreign --who --save -o /data/local/tmp/paasau/ > /dev/null 2>&1 &"
+#冒烟：国外车型，国外车型需使用-foreign参数
+adb shell "nohup /data/local/tmp/paasau/paasau --foreign --who --save -o /data/local/tmp/paasau/ >/dev/null 2>&1 &"
 
-#筛选包含cloud名称的进程
-adb shell "nohup /data/local/tmp/paasau/paasau --who -pn cloud --save -o /data/local/tmp/paasau/ > /dev/null 2>&1 &"
-```
-
-3. 持续观察有无跨境流量
-
-```bash
+#自行调试：筛选包含xiaopeng名称的进程
+adb shell "nohup /data/local/tmp/paasau/paasau --who --save -pn xiaopeng -o /data/local/tmp/paasau/ &"
+#(可选)持续观察有无跨境流量
 adb shell "tail -f /data/local/tmp/paasau/nohup.out"
 ```
 
 
+3. 尽可能全地触发业务场景。
 
-3. 终止运行
+
+4. 终止运行
 
 ```Bash
 adb shell "ps -ef |grep paasau"
@@ -70,6 +73,10 @@ adb shell "ps -ef |grep paasau"
 adb shell "kill <PID>"
 ```
 
+5. 输出文件回收
+文件包括日志+流量包，都默认放在执行目录。
+日志文本命名格式为：result_paasau_240502_150405.log，若日志文件不为空，则代表监测出违规IP。
+流量包命名格式为：capture_paasau_<网卡名>_240502_150405.pcap，每张网卡对应一个pcap文件。
 
 
 ## 离线版本
@@ -88,6 +95,15 @@ tcpdump -i any -w /sdcard/pcap240701.pcap
 adb pull /sdcard/pcap240701.pcap
 paasau_offline.exe pcap240701.pcap
 ```
+
+## Q&A
+1、抓不到进程怎么办？
+
+a）若进程名、IP，依然无法定位，可以wireshark打开pcap包，搜索：tls.handshake.type == 1，可以定位域名信息。可考虑做屏幕录像，来确定触发路径。
+
+b）有可能是别的控制器的流量，譬如大屏开了热点给手机，跨境流量可能是手机的流量。那就抓不到进程。此时，同样在Wireshark搜索 ip.addr=xxxxxxxxx，可发现 Source IP地址不是目标ECU的本地 IP，而是手机或者其他ECU的IP。
+
+
 
 
 
@@ -194,5 +210,5 @@ upx paasau_armv7
 
 ## 致谢
 
-[Hackl0us](https://github.com/Hackl0us) [GeoIP2-CN ](https://github.com/Hackl0us/GeoIP2-CN)，轻量漂亮的IP数据库
+[Hackl0us](https://github.com/Hackl0us) [GeoIP2-CN ](https://github.com/Hackl0us/GeoIP2-CN)
 
