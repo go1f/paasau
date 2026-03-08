@@ -16,21 +16,29 @@ type Config struct {
 }
 
 type RuntimeConfig struct {
-	Debug    bool   `json:"debug"`
+	Debug     bool   `json:"debug"`
 	OutputDir string `json:"output_dir"`
-	TimeZone string `json:"time_zone"`
+	TimeZone  string `json:"time_zone"`
 }
 
 type LiveConfig struct {
-	DefaultPolicy               string `json:"default_policy"`
-	GeoIPDB                     string `json:"geoip_db"`
-	BPFFilter                   string `json:"bpf_filter"`
-	WorkerLimit                 int    `json:"worker_limit"`
-	ProcessLookupTimeoutSeconds int    `json:"process_lookup_timeout_seconds"`
-	SnapLen                     int32  `json:"snaplen"`
-	Promisc                     bool   `json:"promisc"`
-	SavePcap                    bool   `json:"save_pcap"`
-	FindProcess                 bool   `json:"find_process"`
+	DefaultPolicy                string `json:"default_policy"`
+	GeoIPDB                      string `json:"geoip_db"`
+	BPFFilter                    string `json:"bpf_filter"`
+	GeoIPCacheSize               int    `json:"geoip_cache_size"`
+	GeoIPCacheTTLSeconds         int    `json:"geoip_cache_ttl_seconds"`
+	ViolationCacheSize           int    `json:"violation_cache_size"`
+	ViolationCooldownSeconds     int    `json:"violation_cooldown_seconds"`
+	ProcessLookupCacheSize       int    `json:"process_lookup_cache_size"`
+	ProcessLookupCooldownSeconds int    `json:"process_lookup_cooldown_seconds"`
+	WorkerLimit                  int    `json:"worker_limit"`
+	ProcessLookupTimeoutSeconds  int    `json:"process_lookup_timeout_seconds"`
+	ReadTimeoutMillis            int    `json:"read_timeout_millis"`
+	SnapLen                      int32  `json:"snaplen"`
+	Promisc                      bool   `json:"promisc"`
+	SavePcap                     bool   `json:"save_pcap"`
+	SavePcapWindowSeconds        int    `json:"save_pcap_window_seconds"`
+	FindProcess                  bool   `json:"find_process"`
 }
 
 type OfflineConfig struct {
@@ -99,8 +107,32 @@ func (c *Config) applyDefaults() {
 	if c.Live.WorkerLimit <= 0 {
 		c.Live.WorkerLimit = 2
 	}
+	if c.Live.GeoIPCacheSize <= 0 {
+		c.Live.GeoIPCacheSize = 10000
+	}
+	if c.Live.GeoIPCacheTTLSeconds <= 0 {
+		c.Live.GeoIPCacheTTLSeconds = 600
+	}
+	if c.Live.ViolationCacheSize <= 0 {
+		c.Live.ViolationCacheSize = 4096
+	}
+	if c.Live.ViolationCooldownSeconds <= 0 {
+		c.Live.ViolationCooldownSeconds = 30
+	}
+	if c.Live.ProcessLookupCacheSize <= 0 {
+		c.Live.ProcessLookupCacheSize = 2048
+	}
+	if c.Live.ProcessLookupCooldownSeconds <= 0 {
+		c.Live.ProcessLookupCooldownSeconds = 60
+	}
 	if c.Live.ProcessLookupTimeoutSeconds <= 0 {
 		c.Live.ProcessLookupTimeoutSeconds = 5
+	}
+	if c.Live.ReadTimeoutMillis <= 0 {
+		c.Live.ReadTimeoutMillis = 1000
+	}
+	if c.Live.SavePcapWindowSeconds < 0 {
+		c.Live.SavePcapWindowSeconds = 0
 	}
 	if c.Live.SnapLen <= 0 {
 		c.Live.SnapLen = 65536

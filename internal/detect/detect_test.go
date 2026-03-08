@@ -3,15 +3,13 @@ package detect
 import (
 	"net"
 	"testing"
+	"time"
 
 	"paasau/internal/config"
 )
 
 func TestPrivateIPAlwaysAllowed(t *testing.T) {
-	detector := &Detector{
-		policy: config.Policy{Mode: "allowlist", Countries: []string{"CN"}},
-		codes:  map[string]struct{}{"CN": {}},
-	}
+	detector := New(nil, config.Policy{Mode: "allowlist", Countries: []string{"CN"}}, 16, time.Minute)
 
 	result, err := detector.Evaluate(net.ParseIP("192.168.1.2"))
 	if err != nil {
@@ -23,11 +21,8 @@ func TestPrivateIPAlwaysAllowed(t *testing.T) {
 }
 
 func TestAllowlistPolicy(t *testing.T) {
-	detector := &Detector{
-		policy: config.Policy{Mode: "allowlist", Countries: []string{"CN"}},
-		codes:  map[string]struct{}{"CN": {}},
-	}
-	detector.cache.Store("8.8.8.8", "US")
+	detector := New(nil, config.Policy{Mode: "allowlist", Countries: []string{"CN"}}, 16, time.Minute)
+	detector.cache.Add("8.8.8.8", "US")
 
 	result, err := detector.Evaluate(net.ParseIP("8.8.8.8"))
 	if err != nil {
@@ -39,12 +34,9 @@ func TestAllowlistPolicy(t *testing.T) {
 }
 
 func TestDenylistPolicy(t *testing.T) {
-	detector := &Detector{
-		policy: config.Policy{Mode: "denylist", Countries: []string{"CN"}},
-		codes:  map[string]struct{}{"CN": {}},
-	}
-	detector.cache.Store("1.1.1.1", "US")
-	detector.cache.Store("114.114.114.114", "CN")
+	detector := New(nil, config.Policy{Mode: "denylist", Countries: []string{"CN"}}, 16, time.Minute)
+	detector.cache.Add("1.1.1.1", "US")
+	detector.cache.Add("114.114.114.114", "CN")
 
 	allowed, err := detector.Evaluate(net.ParseIP("1.1.1.1"))
 	if err != nil {

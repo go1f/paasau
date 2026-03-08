@@ -8,7 +8,6 @@ import (
 	"fmt"
 	"net"
 	"os"
-	"path/filepath"
 	"regexp"
 	"strings"
 	"sync"
@@ -16,10 +15,10 @@ import (
 
 	"github.com/google/gopacket"
 	"github.com/google/gopacket/layers"
-	"github.com/google/gopacket/pcap"
 	"github.com/google/gopacket/pcapgo"
 	"github.com/shirou/gopsutil/process"
 
+	"paasau/internal/cache"
 	"paasau/internal/config"
 	"paasau/internal/detect"
 	"paasau/internal/geoip"
@@ -38,13 +37,20 @@ type Options struct {
 }
 
 type runner struct {
-	loggers *output.Loggers
-	detector *detect.Detector
-	filter   string
-	savePcap bool
-	snapLen  int32
-	promisc  bool
-	finder   *processFinder
+	loggers          *output.Loggers
+	detector         packetDetector
+	filter           string
+	savePcap         bool
+	saveWindow       time.Duration
+	snapLen          int32
+	promisc          bool
+	readTimeout      time.Duration
+	violationTracker *cache.TTLSet
+	finder           *processFinder
+}
+
+type packetDetector interface {
+	Evaluate(net.IP) (detect.Result, error)
 }
 
 func Run(ctx context.Context, cfg *config.Config, opts Options) error {
@@ -80,19 +86,23 @@ func Run(ctx context.Context, cfg *config.Config, opts Options) error {
 	}
 
 	r := &runner{
-		loggers: loggers,
-		detector: detect.New(reader, policy),
-		filter:   pickString(opts.BPFFilter, cfg.Live.BPFFilter),
-		savePcap: cfg.Live.SavePcap || opts.SavePcap,
-		snapLen:  cfg.Live.SnapLen,
-		promisc:  cfg.Live.Promisc,
+		loggers:          loggers,
+		detector:         detect.New(reader, policy, cfg.Live.GeoIPCacheSize, time.Duration(cfg.Live.GeoIPCacheTTLSeconds)*time.Second),
+		filter:           pickString(opts.BPFFilter, cfg.Live.BPFFilter),
+		savePcap:         cfg.Live.SavePcap || opts.SavePcap,
+		saveWindow:       time.Duration(cfg.Live.SavePcapWindowSeconds) * time.Second,
+		snapLen:          cfg.Live.SnapLen,
+		promisc:          cfg.Live.Promisc,
+		readTimeout:      time.Duration(cfg.Live.ReadTimeoutMillis) * time.Millisecond,
+		violationTracker: cache.NewTTLSet(cfg.Live.ViolationCacheSize, time.Duration(cfg.Live.ViolationCooldownSeconds)*time.Second),
 		finder: &processFinder{
-			logger:     loggers,
-			policyName: policyName,
-			sem:        make(chan struct{}, cfg.Live.WorkerLimit),
-			timeout:    time.Duration(cfg.Live.ProcessLookupTimeoutSeconds) * time.Second,
-			matcher:    matcher,
-			enabled:    findProcess,
+			logger:          loggers,
+			policyName:      policyName,
+			sem:             make(chan struct{}, cfg.Live.WorkerLimit),
+			timeout:         time.Duration(cfg.Live.ProcessLookupTimeoutSeconds) * time.Second,
+			cooldownTracker: cache.NewTTLSet(cfg.Live.ProcessLookupCacheSize, time.Duration(cfg.Live.ProcessLookupCooldownSeconds)*time.Second),
+			matcher:         matcher,
+			enabled:         findProcess,
 		},
 	}
 
@@ -107,6 +117,7 @@ func Run(ctx context.Context, cfg *config.Config, opts Options) error {
 	loggers.Info.Printf("Policy: %s", policyName)
 	loggers.Info.Printf("GeoIP DB: %s", dbPath)
 	loggers.Info.Printf("BPF filter: %s", r.filter)
+	loggers.Info.Printf("Press Ctrl-C to stop live capture")
 
 	var wg sync.WaitGroup
 	errCh := make(chan error, len(interfaces))
@@ -131,79 +142,61 @@ func Run(ctx context.Context, cfg *config.Config, opts Options) error {
 	}
 }
 
-func (r *runner) captureInterface(ctx context.Context, ifaceName string, policyName string, outputDir string) error {
-	r.loggers.Info.Printf("OpenLive interface: %s", ifaceName)
-
-	handle, err := pcap.OpenLive(ifaceName, r.snapLen, r.promisc, pcap.BlockForever)
+func (r *runner) handlePacket(ctx context.Context, dstIP net.IP, ifaceName string, policyName string, saveGate *saveWindow, now time.Time) {
+	result, err := r.detector.Evaluate(dstIP)
 	if err != nil {
-		return fmt.Errorf("open live interface %s: %w", ifaceName, err)
-	}
-	defer handle.Close()
-
-	if err := handle.SetBPFFilter(r.filter); err != nil {
-		return fmt.Errorf("set bpf filter on %s: %w", ifaceName, err)
-	}
-
-	go func() {
-		<-ctx.Done()
-		handle.Close()
-	}()
-
-	var pcapWriter *pcapgo.Writer
-	var pcapFile *os.File
-	if r.savePcap {
-		fileName := fmt.Sprintf("capture_paasau_%s_%s.pcap", ifaceName, time.Now().Format("060102_150405"))
-		path := filepath.Join(outputDir, fileName)
-		pcapFile, err = os.Create(path)
-		if err != nil {
-			return fmt.Errorf("create pcap file %s: %w", path, err)
-		}
-		defer pcapFile.Close()
-
-		pcapWriter = pcapgo.NewWriter(pcapFile)
-		if err := pcapWriter.WriteFileHeader(uint32(r.snapLen), layers.LinkTypeEthernet); err != nil {
-			return fmt.Errorf("write pcap header %s: %w", path, err)
-		}
-	}
-
-	packetSource := gopacket.NewPacketSource(handle, handle.LinkType())
-	for {
-		select {
-		case <-ctx.Done():
-			return nil
-		case packet, ok := <-packetSource.Packets():
-			if !ok {
-				return nil
-			}
-			if pcapWriter != nil {
-				if err := pcapWriter.WritePacket(packet.Metadata().CaptureInfo, packet.Data()); err != nil {
-					return fmt.Errorf("write captured packet: %w", err)
-				}
-			}
-			r.handlePacket(ctx, packet, ifaceName, policyName)
-		}
-	}
-}
-
-func (r *runner) handlePacket(ctx context.Context, packet gopacket.Packet, ifaceName string, policyName string) {
-	ipLayer := packet.Layer(layers.LayerTypeIPv4)
-	if ipLayer == nil {
-		return
-	}
-
-	ipPacket, _ := ipLayer.(*layers.IPv4)
-	result, err := r.detector.Evaluate(ipPacket.DstIP)
-	if err != nil {
-		r.loggers.Debug.Printf("evaluate packet dst=%s iface=%s: %v", ipPacket.DstIP.String(), ifaceName, err)
+		r.loggers.Debug.Printf("evaluate packet dst=%s iface=%s: %v", dstIP.String(), ifaceName, err)
 		return
 	}
 	if result.Allowed {
-		r.loggers.Debug.Printf("Skip ip=%s country=%s reason=%s", result.IP, result.Country, result.Reason)
 		return
 	}
 
+	if saveGate != nil {
+		saveGate.Trigger(now)
+	}
+
+	if !r.violationTracker.Allow(ifaceName + "|" + result.IP) {
+		return
+	}
 	r.loggers.Info.Printf("Violated IP: %s country=%s iface=%s policy=%s", result.IP, result.Country, ifaceName, policyName)
 	r.finder.Find(ctx, result.IP)
+}
+
+func writeCapturedPacket(
+	pcapFile **os.File,
+	pcapWriter **pcapgo.Writer,
+	pcapPath string,
+	linkType layers.LinkType,
+	snapLen int32,
+	saveGate *saveWindow,
+	savePcap bool,
+	ci gopacket.CaptureInfo,
+	data []byte,
+	now time.Time,
+) error {
+	if !savePcap || !saveGate.Active(now) {
+		return nil
+	}
+
+	if *pcapWriter == nil {
+		file, err := os.Create(pcapPath)
+		if err != nil {
+			return fmt.Errorf("create pcap file %s: %w", pcapPath, err)
+		}
+		writer := pcapgo.NewWriter(file)
+		if err := writer.WriteFileHeader(uint32(snapLen), linkType); err != nil {
+			file.Close()
+			return fmt.Errorf("write pcap header %s: %w", pcapPath, err)
+		}
+		*pcapFile = file
+		*pcapWriter = writer
+	}
+
+	if err := (*pcapWriter).WritePacket(ci, data); err != nil {
+		return fmt.Errorf("write captured packet: %w", err)
+	}
+	return nil
 }
 
 func resolveInterfaces(explicit []string) ([]string, error) {
@@ -234,21 +227,25 @@ func pickString(override string, fallback string) string {
 }
 
 type processFinder struct {
-	logger     *output.Loggers
-	policyName string
-	sem        chan struct{}
-	timeout    time.Duration
-	matcher    *regexp.Regexp
-	enabled    bool
-	active     sync.Map
+	logger          *output.Loggers
+	policyName      string
+	sem             chan struct{}
+	timeout         time.Duration
+	cooldownTracker *cache.TTLSet
+	lookupFn        func(context.Context, string) (string, error)
+	matcher         *regexp.Regexp
+	enabled         bool
+	active          sync.Map
 }
 
 func (p *processFinder) Find(ctx context.Context, ip string) {
 	if !p.enabled {
 		return
 	}
+	if !p.cooldownTracker.Allow(ip) {
+		return
+	}
 	if _, exists := p.active.LoadOrStore(ip, true); exists {
-		p.logger.Debug.Printf("Skip duplicated process lookup for %s", ip)
 		return
 	}
 
@@ -269,7 +266,11 @@ func (p *processFinder) Find(ctx context.Context, ip string) {
 		defer cancel()
 
 		start := time.Now()
-		message, err := p.lookup(lookupCtx, ip)
+		lookup := p.lookup
+		if p.lookupFn != nil {
+			lookup = p.lookupFn
+		}
+		message, err := lookup(lookupCtx, ip)
 		if err != nil {
 			p.logger.Debug.Printf("Process lookup failed for %s: %v", ip, err)
 			return

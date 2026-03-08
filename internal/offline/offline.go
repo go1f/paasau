@@ -3,13 +3,9 @@ package offline
 import (
 	"fmt"
 	"io/fs"
-	"net"
 	"path/filepath"
 	"strings"
-
-	"github.com/google/gopacket"
-	"github.com/google/gopacket/layers"
-	"github.com/google/gopacket/pcap"
+	"time"
 
 	"paasau/internal/config"
 	"paasau/internal/detect"
@@ -35,7 +31,7 @@ func Run(cfg *config.Config, opts Options) error {
 	}
 	defer reader.Close()
 
-	detector := detect.New(reader, policy)
+	detector := detect.New(reader, policy, cfg.Live.GeoIPCacheSize, time.Duration(cfg.Live.GeoIPCacheTTLSeconds)*time.Second)
 	pcapFiles, err := getPcapFiles(opts.InputDir)
 	if err != nil {
 		return err
@@ -48,40 +44,9 @@ func Run(cfg *config.Config, opts Options) error {
 
 	for _, pcapFile := range pcapFiles {
 		fmt.Printf("Handling %s:\n", pcapFile)
-
-		handle, err := pcap.OpenOffline(pcapFile)
-		if err != nil {
-			fmt.Printf("  open failed: %v\n\n", err)
-			continue
+		if err := scanPcapFile(pcapFile, detector); err != nil {
+			fmt.Printf("  open failed: %v\n", err)
 		}
-
-		seen := make(map[string]struct{})
-		packetSource := gopacket.NewPacketSource(handle, handle.LinkType())
-		for packet := range packetSource.Packets() {
-			ipLayer := packet.Layer(layers.LayerTypeIPv4)
-			if ipLayer == nil {
-				continue
-			}
-
-			ip := ipLayer.(*layers.IPv4).DstIP
-			if _, ok := seen[ip.String()]; ok {
-				continue
-			}
-			seen[ip.String()] = struct{}{}
-
-			result, err := detector.Evaluate(net.ParseIP(ip.String()))
-			if err != nil {
-				fmt.Printf("  lookup failed for %s: %v\n", ip.String(), err)
-				continue
-			}
-			if result.Allowed {
-				continue
-			}
-
-			fmt.Printf("  violated ip=%s country=%s\n", result.IP, result.Country)
-		}
-
-		handle.Close()
 		fmt.Println()
 	}
 

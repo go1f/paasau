@@ -4,8 +4,9 @@ import (
 	"fmt"
 	"net"
 	"strings"
-	"sync"
+	"time"
 
+	"paasau/internal/cache"
 	"paasau/internal/config"
 	"paasau/internal/geoip"
 )
@@ -18,21 +19,22 @@ type Result struct {
 }
 
 type Detector struct {
-	reader  *geoip.Reader
-	policy  config.Policy
-	codes   map[string]struct{}
-	cache   sync.Map
+	reader *geoip.Reader
+	policy config.Policy
+	codes  map[string]struct{}
+	cache  *cache.TTLCache
 }
 
-func New(reader *geoip.Reader, policy config.Policy) *Detector {
+func New(reader *geoip.Reader, policy config.Policy, maxEntries int, ttl time.Duration) *Detector {
 	codes := make(map[string]struct{}, len(policy.Countries))
 	for _, code := range policy.Countries {
 		codes[strings.ToUpper(code)] = struct{}{}
 	}
 	return &Detector{
-		reader:  reader,
-		policy:  policy,
-		codes:   codes,
+		reader: reader,
+		policy: policy,
+		codes:  codes,
+		cache:  cache.NewTTLCache(maxEntries, ttl),
 	}
 }
 
@@ -73,15 +75,15 @@ func (d *Detector) Evaluate(ip net.IP) (Result, error) {
 }
 
 func (d *Detector) countryCode(ip net.IP) (string, error) {
-	if value, ok := d.cache.Load(ip.String()); ok {
-		return value.(string), nil
+	if value, ok := d.cache.Get(ip.String()); ok {
+		return value, nil
 	}
 
 	country, err := d.reader.CountryCode(ip)
 	if err != nil {
 		return "", err
 	}
-	d.cache.Store(ip.String(), country)
+	d.cache.Add(ip.String(), country)
 	return country, nil
 }
 
