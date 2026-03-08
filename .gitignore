@@ -10,7 +10,4 @@ testcase/
 *.pcapng
 *.exe
 *.out
-paasau_v23
-paasau_offline_v1.3
-paasau_arm_v23
 /paasau

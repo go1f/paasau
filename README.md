@@ -1,13 +1,11 @@
 # paasau
 
-`paasau` 是一个面向车联网与嵌入式联网场景的跨境 IP 合规排查工具，用于识别设备是否访问了不符合地域策略的公网 IP。
+面向车联网与嵌入式联网场景的跨境 IP 合规排查工具，用于识别设备是否访问了不符合地域策略的公网 IP。
 
 工具提供两类工作模式：
 
 - `-live`：实时抓包检测运行中的联网行为。
 - `-offline`：离线扫描 `.pcap` / `.pcapng` 文件。
-
-GitHub 历史仓库为 [go1f/paasau](https://github.com/go1f/paasau)。当前仓库由维护者持续整理并演进，默认入口保持实时检测行为，离线分析通过 `-offline` 显式启用。
 
 ## 快速上手
 
@@ -30,9 +28,42 @@ GitHub 历史仓库为 [go1f/paasau](https://github.com/go1f/paasau)。当前仓
 
 ### 主要参数
 
+以下示例为当前程序执行帮助命令时的实际输出。
+
+实时模式帮助输出：
+
+```text
+Usage: /path/to/paasau -live [flags]
+
+Flags:
+  -config <file>   Config file path
+  -policy <name>   Policy name, e.g. china-car / foreign-car
+  -foreign         Compatibility alias for -policy foreign-car
+  -i <if0,if1>     Capture interfaces
+  -o <dir>         Output directory
+  -db <file>       GeoIP MMDB path
+  -save            Save captured packets
+  -who             Find process for violated connections
+  -pn <regex>      Limit process lookup by process name
+```
+
+离线模式帮助输出：
+
+```text
+Usage: /path/to/paasau -offline [flags] <pcap-dir>
+
+Flags:
+  -config <file>   Config file path
+  -policy <name>   Policy name
+  -foreign         Compatibility alias for -policy foreign-car
+  -db <file>       GeoIP MMDB path
+```
+
+中文说明：
+
 - `-config`：指定配置文件，默认 `configs/default.json`。
 - `-policy`：指定策略名，例如 `china-car` 或 `foreign-car`。
-- `-foreign`：兼容旧版本参数，等价于 `-policy foreign-car`。
+- `-foreign`：兼容旧版本参数，等价于 `-policy foreign-car`。该参数在 `-live` 与 `-offline` 模式下均可使用。
 - `-i`：指定抓包网卡；多个网卡使用逗号分隔。
 - `-o`：指定运行输出目录。
 - `-db`：指定数据库文件路径。
