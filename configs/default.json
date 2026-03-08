@@ -1,0 +1,34 @@
+{
+  "runtime": {
+    "debug": true,
+    "output_dir": "../runtime/output",
+    "time_zone": "Asia/Shanghai"
+  },
+  "live": {
+    "default_policy": "china-car",
+    "geoip_db": "../assets/mmdb/GeoIP2-CN-20250318.mmdb",
+    "bpf_filter": "ip and (not net 172.168.1.0/31) and not ((dst net 192.168.0.0/16 or dst net 172.16.0.0/12 or dst net 10.0.0.0/8 or dst net 255.255.255.255 or dst net 169.254.0.0/16 or dst net 224.0.0.0/4 or dst net 127.0.0.0/8) and (src net 192.168.0.0/16 or src net 172.16.0.0/12 or src net 10.0.0.0/8 or src net 169.254.0.0/16 or src net 127.0.0.0/8))",
+    "worker_limit": 2,
+    "process_lookup_timeout_seconds": 5,
+    "snaplen": 65536,
+    "promisc": true,
+    "save_pcap": false,
+    "find_process": false
+  },
+  "offline": {
+    "default_policy": "china-car",
+    "geoip_db": "../assets/mmdb/GeoLite2-City-250626-V01.mmdb"
+  },
+  "policies": {
+    "china-car": {
+      "description": "China vehicle: only China destination IPs are allowed",
+      "mode": "allowlist",
+      "countries": ["CN"]
+    },
+    "foreign-car": {
+      "description": "Foreign vehicle: China destination IPs are blocked",
+      "mode": "denylist",
+      "countries": ["CN"]
+    }
+  }
+}
