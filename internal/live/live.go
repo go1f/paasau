@@ -30,7 +30,6 @@ type Options struct {
 	Interfaces  []string
 	OutputDir   string
 	GeoIPDB     string
-	BPFFilter   string
 	SavePcap    bool
 	FindProcess bool
 	ProcessName string
@@ -88,7 +87,7 @@ func Run(ctx context.Context, cfg *config.Config, opts Options) error {
 	r := &runner{
 		loggers:          loggers,
 		detector:         detect.New(reader, policy, cfg.Live.GeoIPCacheSize, time.Duration(cfg.Live.GeoIPCacheTTLSeconds)*time.Second),
-		filter:           pickString(opts.BPFFilter, cfg.Live.BPFFilter),
+		filter:           cfg.Live.BPFFilter,
 		savePcap:         cfg.Live.SavePcap || opts.SavePcap,
 		saveWindow:       time.Duration(cfg.Live.SavePcapWindowSeconds) * time.Second,
 		snapLen:          cfg.Live.SnapLen,

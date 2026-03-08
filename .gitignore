@@ -4,6 +4,7 @@
 backup/
 dist/
 runtime/
+testcase/
 *.log
 *.pcap
 *.pcapng

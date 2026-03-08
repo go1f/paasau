@@ -15,7 +15,6 @@ type Options struct {
 	Interfaces  []string
 	OutputDir   string
 	GeoIPDB     string
-	BPFFilter   string
 	SavePcap    bool
 	FindProcess bool
 	ProcessName string

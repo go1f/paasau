@@ -7,7 +7,6 @@ import (
 	"os"
 	"os/signal"
 	"runtime"
-	"strconv"
 	"strings"
 	"syscall"
 	"time"
@@ -66,7 +65,6 @@ func runLive(args []string) {
 	interfacesFlag := fs.String("i", "", "Comma-separated interfaces")
 	outputDir := fs.String("o", "", "Output directory for logs and captures")
 	geoIPDB := fs.String("db", "", "GeoIP MMDB file path")
-	bpfFilter := fs.String("filter", "", "BPF filter override")
 	savePcap := fs.Bool("save", false, "Save captured packets")
 	findProcess := fs.Bool("who", false, "Find process for violated connections")
 	processName := fs.String("pn", "", "Only search matched process names (regexp)")
@@ -90,7 +88,6 @@ func runLive(args []string) {
 		Interfaces:  splitCSV(*interfacesFlag),
 		OutputDir:   *outputDir,
 		GeoIPDB:     *geoIPDB,
-		BPFFilter:   *bpfFilter,
 		SavePcap:    *savePcap,
 		FindProcess: *findProcess,
 		ProcessName: *processName,
@@ -202,7 +199,6 @@ func rootUsageStringForMode(program string, liveAvailable bool) string {
 		b.WriteString("  -i <if0,if1>     Capture interfaces\n")
 		b.WriteString("  -o <dir>         Output directory\n")
 		b.WriteString("  -db <file>       GeoIP MMDB path\n")
-		b.WriteString("  -filter <expr>   BPF filter override\n")
 		b.WriteString("  -save            Save captured packets\n")
 		b.WriteString("  -who             Find process for violated connections\n")
 		b.WriteString("  -pn <regex>      Limit process lookup by process name\n\n")
@@ -243,7 +239,6 @@ func liveUsageString(program string) string {
 		{name: "-i", arg: "<if0,if1>", desc: "Comma-separated interfaces"},
 		{name: "-o", arg: "<dir>", desc: "Output directory for logs and captures"},
 		{name: "-db", arg: "<file>", desc: "GeoIP MMDB file path"},
-		{name: "-filter", arg: "<expr>", desc: "BPF filter override"},
 		{name: "-save", desc: "Save captured packets"},
 		{name: "-who", desc: "Find process for violated connections"},
 		{name: "-pn", arg: "<regex>", desc: "Only search matched process names (regexp)"},
@@ -305,9 +300,7 @@ func commandUsageString(program string, subcommand string, suffix string, lines 
 		b.WriteString(" -i wlan0 -who\n")
 		b.WriteString("  ")
 		b.WriteString(program)
-		b.WriteString(" live -save -filter ")
-		b.WriteString(strconv.Quote("tcp or udp"))
-		b.WriteString("\n")
+		b.WriteString(" live -save -db /path/to/mmdb/GeoIP2-CN.mmdb\n")
 	} else {
 		b.WriteString("  ")
 		b.WriteString(program)
