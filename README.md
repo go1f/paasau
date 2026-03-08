@@ -1,116 +1,144 @@
 # paasau
 
-`paasau` 是一个面向车联网/嵌入式联网场景的跨境 IP 合规排查工具，用于识别设备是否访问了不符合地域策略的公网 IP。
+`paasau` 是一个面向车联网与嵌入式联网场景的跨境 IP 合规排查工具，用于识别设备是否访问了不符合地域策略的公网 IP。
 
-典型用法很简单：
+工具提供两类工作模式：
 
-- 国内车型：检查是否访问了非中国大陆公网 IP
-- 海外车型：检查是否访问了中国大陆公网 IP
-- 实时排查：直接运行 `paasau`
-- 离线复盘：运行 `paasau offline <pcap目录>`
+- `-live`：实时抓包检测运行中的联网行为。
+- `-offline`：离线扫描 `.pcap` / `.pcapng` 文件。
 
-GitHub 历史仓库为 [go1f/paasau](https://github.com/go1f/paasau)。
+GitHub 历史仓库为 [go1f/paasau](https://github.com/go1f/paasau)。当前仓库由维护者持续整理并演进，默认入口保持实时检测行为，离线分析通过 `-offline` 显式启用。
 
 ## 快速上手
 
-默认入口是 `live`：
+默认入口为实时检测：
 
-- `/path/to/paasau` 等价于 `/path/to/paasau live`
-- `/path/to/paasau -who` 等价于 `/path/to/paasau live -who`
-- 只有离线扫描时才需要显式写 `offline`
+- `/path/to/paasau` 等价于 `/path/to/paasau -live`
+- `/path/to/paasau -who` 会直接按实时模式执行
+- 仅在离线扫描时需要显式使用 `-offline`
 
 ### 查看帮助
 
 ```bash
+# 查看总览帮助
 /path/to/paasau -h
-/path/to/paasau live -h
-/path/to/paasau offline -h
-```
-
-### 常用命令
-
-实时检测：
-
-```bash
-/path/to/paasau
-/path/to/paasau -policy china-car
-/path/to/paasau -foreign
-/path/to/paasau -who
-/path/to/paasau -save
-/path/to/paasau -i eth0,wlan0
-/path/to/paasau -pn "adb|curl|python"
-/path/to/paasau -db /path/to/mmdb/GeoIP2-CN.mmdb
-```
-
-离线检测：
-
-```bash
-/path/to/paasau offline /path/to/pcap_dump
-/path/to/paasau offline -policy china-car /path/to/pcap_dump
-/path/to/paasau offline -policy foreign-car /path/to/pcap_dump
-/path/to/paasau offline -foreign /path/to/pcap_dump
-/path/to/paasau offline -db /path/to/mmdb/GeoLite2-City-250626-V01.mmdb /path/to/pcap_dump
+# 查看实时模式帮助
+/path/to/paasau -live -h
+# 查看离线模式帮助
+/path/to/paasau -offline -h
 ```
 
 ### 主要参数
 
-- `-config`：指定配置文件，默认 `configs/default.json`
-- `-policy`：指定策略名，如 `china-car` / `foreign-car`
-- `-foreign`：兼容旧版本参数，等价于 `-policy foreign-car`
-- `-i`：指定抓包网卡，多个网卡用逗号分隔
-- `-o`：指定运行输出目录
-- `-db`：指定数据库文件路径
-- `-save`：保存抓到的 `.pcap`
-- `-who`：启用违规连接的进程定位
-- `-pn`：仅定位匹配正则的进程名
+- `-config`：指定配置文件，默认 `configs/default.json`。
+- `-policy`：指定策略名，例如 `china-car` 或 `foreign-car`。
+- `-foreign`：兼容旧版本参数，等价于 `-policy foreign-car`。
+- `-i`：指定抓包网卡；多个网卡使用逗号分隔。
+- `-o`：指定运行输出目录。
+- `-db`：指定数据库文件路径。
+- `-save`：保存抓到的 `.pcap` 文件。
+- `-who`：启用违规连接的进程定位。
+- `-pn`：仅定位匹配正则表达式的进程名。
 
 ### 策略说明
 
-- `china-car`：仅允许中国大陆目的 IP
-- `foreign-car`：禁止中国大陆目的 IP
+- `china-car`：仅允许中国大陆目的 IP。
+- `foreign-car`：禁止中国大陆目的 IP。
 
 ### 默认数据库
 
 - 实时检测默认库：`assets/mmdb/GeoIP2-CN-20250318.mmdb`
 - 离线检测默认库：`assets/mmdb/GeoLite2-City-250626-V01.mmdb`
 
+### 常用命令
+
+实时检测示例：
+
+```bash
+# 按默认实时模式启动
+/path/to/paasau
+# 按国内车型策略启动实时检测
+/path/to/paasau -policy china-car
+# 使用旧版兼容参数切换到海外车型策略
+/path/to/paasau -foreign
+# 启用违规连接进程定位
+/path/to/paasau -who
+# 启用抓包保存
+/path/to/paasau -save
+# 指定抓包网卡
+/path/to/paasau -i eth0,wlan0
+# 仅定位指定模式的进程名
+/path/to/paasau -pn "adb|curl|python"
+# 指定实时检测数据库
+/path/to/paasau -db /path/to/mmdb/GeoIP2-CN.mmdb
+```
+
+离线检测示例：
+
+```bash
+# 扫描目录下的 pcap 文件
+/path/to/paasau -offline /path/to/pcap_dump
+# 按国内车型策略执行离线扫描
+/path/to/paasau -offline -policy china-car /path/to/pcap_dump
+# 按海外车型策略执行离线扫描
+/path/to/paasau -offline -policy foreign-car /path/to/pcap_dump
+# 使用旧版兼容参数执行海外车型离线扫描
+/path/to/paasau -offline -foreign /path/to/pcap_dump
+# 指定离线扫描数据库
+/path/to/paasau -offline -db /path/to/mmdb/GeoLite2-City-250626-V01.mmdb /path/to/pcap_dump
+```
+
+离线模式会递归扫描目录下的 `.pcap` 和 `.pcapng` 文件，并输出命中的违规公网 IP。
+
 ### Android 使用示例
 
 构建后把二进制推到设备：
 
 ```bash
+# 创建设备侧目录
 adb shell mkdir -p /data/local/tmp/paasau
+# 推送可执行文件
 adb push /path/to/paasau /data/local/tmp/paasau/paasau
+# 切换 adb root
 adb root
+# 赋予执行权限
 adb shell "chmod +x /data/local/tmp/paasau/paasau"
 ```
 
 国内车型实时检查：
 
 ```bash
+# 以国内车型策略启动实时检测
 adb shell "nohup /data/local/tmp/paasau/paasau -policy china-car -who -save -o /data/local/tmp/paasau/ >/dev/null 2>&1 &"
 ```
 
 海外车型实时检查：
 
 ```bash
+# 以海外车型策略启动实时检测
 adb shell "nohup /data/local/tmp/paasau/paasau -policy foreign-car -who -save -o /data/local/tmp/paasau/ >/dev/null 2>&1 &"
+# 使用兼容参数启动海外车型实时检测
 adb shell "nohup /data/local/tmp/paasau/paasau -foreign -who -save -o /data/local/tmp/paasau/ >/dev/null 2>&1 &"
 ```
 
 按进程名筛查：
 
 ```bash
+# 仅对匹配指定模式的进程执行归因
 adb shell "nohup /data/local/tmp/paasau/paasau -policy china-car -who -pn 'curl|python|adb' -o /data/local/tmp/paasau/ >/dev/null 2>&1 &"
 ```
 
 离线抓包分析：
 
 ```bash
+# 切换 adb root
 adb root
+# 在设备侧抓包
 adb shell "tcpdump -i any -w /sdcard/pcap240701.pcap"
+# 拉回抓包文件
 adb pull /sdcard/pcap240701.pcap
-/path/to/paasau offline .
+# 在主机侧执行离线分析
+/path/to/paasau -offline .
 ```
 
 ## 构建
@@ -203,7 +231,7 @@ GOCACHE=$(pwd)/.gocache go build ./...
 ### 实时检测
 
 - 自动枚举所有处于 UP 状态的非回环网卡
-- 使用可配置的 BPF 过滤器抓取 IPv4 流量
+- 使用配置文件中的默认 BPF 过滤器抓取 IPv4 流量
 - 过滤私网、回环、多播、链路本地、广播等地址
 - 基于 MMDB 读取目的 IP 国家码
 - 按策略判断是否违规
@@ -225,7 +253,7 @@ GOCACHE=$(pwd)/.gocache go build ./...
 - Android/嵌入式环境下的进程定位受权限和连接生命周期影响，不能保证 100% 命中
 - `test/` 目录中的 eBPF 方案仍是实验状态，未纳入主流程
 
-## 推荐后续优化
+## 后续优化计划
 
 - 补 `.github/workflows` 做自动构建和发布
 - 给策略配置增加 schema 校验

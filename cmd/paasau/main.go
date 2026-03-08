@@ -29,9 +29,9 @@ func main() {
 	}
 
 	switch os.Args[1] {
-	case "live":
+	case "live", "-live":
 		runLive(os.Args[2:])
-	case "offline":
+	case "offline", "-offline":
 		runOffline(os.Args[2:])
 	case "-h", "--help", "help":
 		printRootUsage()
@@ -174,21 +174,21 @@ func rootUsageStringForMode(program string, liveAvailable bool) string {
 	var b strings.Builder
 	b.WriteString("Usage: ")
 	b.WriteString(program)
-	b.WriteString(" <subcommand> [flags]\n\n")
+	b.WriteString(" [mode] [flags]\n\n")
 	b.WriteString("Default behavior: ")
 	b.WriteString(program)
 	if liveAvailable {
 		b.WriteString(" [live flags]\n\n")
 	} else {
-		b.WriteString(" offline <pcap-dir>\n\n")
+		b.WriteString(" -offline <pcap-dir>\n\n")
 	}
-	b.WriteString("Subcommands:\n")
+	b.WriteString("Modes:\n")
 	if liveAvailable {
-		b.WriteString("  live      Capture live traffic and detect policy violations (default)\n")
+		b.WriteString("  -live      Capture live traffic and detect policy violations\n")
 	} else {
-		b.WriteString("  live      Not supported in Windows builds\n")
+		b.WriteString("  -live      Not supported in Windows builds\n")
 	}
-	b.WriteString("  offline   Scan pcap files in a directory\n\n")
+	b.WriteString("  -offline   Scan pcap files in a directory\n\n")
 	b.WriteString("Config default: ")
 	b.WriteString(defaultConfigPath)
 	b.WriteString("\n\n")
@@ -214,11 +214,11 @@ func rootUsageStringForMode(program string, liveAvailable bool) string {
 	if liveAvailable {
 		b.WriteString("  ")
 		b.WriteString(program)
-		b.WriteString(" live -h\n")
+		b.WriteString(" -live -h\n")
 	}
 	b.WriteString("  ")
 	b.WriteString(program)
-	b.WriteString(" offline -h\n\n")
+	b.WriteString(" -offline -h\n\n")
 	b.WriteString("Examples:\n")
 	if liveAvailable {
 		b.WriteString("  ")
@@ -227,12 +227,12 @@ func rootUsageStringForMode(program string, liveAvailable bool) string {
 	}
 	b.WriteString("  ")
 	b.WriteString(program)
-	b.WriteString(" offline ./pcap_dump\n")
+	b.WriteString(" -offline ./pcap_dump\n")
 	return b.String()
 }
 
 func liveUsageString(program string) string {
-	return commandUsageString(program, "live", "[flags]", []flagLine{
+	return commandUsageString(program, "-live", "[flags]", []flagLine{
 		{name: "-config", arg: "<file>", desc: "Path to config file"},
 		{name: "-policy", arg: "<name>", desc: "Policy name from config"},
 		{name: "-foreign", desc: "Compatibility alias for -policy foreign-car"},
@@ -246,7 +246,7 @@ func liveUsageString(program string) string {
 }
 
 func offlineUsageString(program string) string {
-	return commandUsageString(program, "offline", "[flags] <pcap-dir>", []flagLine{
+	return commandUsageString(program, "-offline", "[flags] <pcap-dir>", []flagLine{
 		{name: "-config", arg: "<file>", desc: "Path to config file"},
 		{name: "-policy", arg: "<name>", desc: "Policy name from config"},
 		{name: "-foreign", desc: "Compatibility alias for -policy foreign-car"},
@@ -294,17 +294,17 @@ func commandUsageString(program string, subcommand string, suffix string, lines 
 	}
 
 	b.WriteString("\nExamples:\n")
-	if subcommand == "live" {
+	if subcommand == "-live" {
 		b.WriteString("  ")
 		b.WriteString(program)
 		b.WriteString(" -i wlan0 -who\n")
 		b.WriteString("  ")
 		b.WriteString(program)
-		b.WriteString(" live -save -db /path/to/mmdb/GeoIP2-CN.mmdb\n")
+		b.WriteString(" -live -save -db /path/to/mmdb/GeoIP2-CN.mmdb\n")
 	} else {
 		b.WriteString("  ")
 		b.WriteString(program)
-		b.WriteString(" offline ./pcap_dump\n")
+		b.WriteString(" -offline ./pcap_dump\n")
 	}
 	return b.String()
 }
