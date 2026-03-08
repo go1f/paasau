@@ -2,18 +2,9 @@
 
 面向车联网与嵌入式联网场景的跨境 IP 合规排查工具，用于识别设备是否访问了不符合地域策略的公网 IP。
 
-工具提供两类工作模式：
-
-- `-live`：实时抓包检测运行中的联网行为。
-- `-offline`：离线扫描 `.pcap` / `.pcapng` 文件。
-
 ## 快速上手
 
-默认入口为实时检测：
-
-- `/path/to/paasau` 等价于 `/path/to/paasau -live`
-- `/path/to/paasau -who` 会直接按实时模式执行
-- 仅在离线扫描时需要显式使用 `-offline`
+默认情况下直接执行实时检测；如需离线分析，可使用 `-offline`。
 
 ### 查看帮助
 
@@ -28,7 +19,7 @@
 
 ### 主要参数
 
-以下示例为当前程序执行帮助命令时的实际输出。
+以下内容为当前程序执行帮助命令时的实际输出。
 
 实时模式帮助输出：
 
@@ -59,8 +50,6 @@ Flags:
   -db <file>       GeoIP MMDB path
 ```
 
-中文说明：
-
 - `-config`：指定配置文件，默认 `configs/default.json`。
 - `-policy`：指定策略名，例如 `china-car` 或 `foreign-car`。
 - `-foreign`：兼容旧版本参数，等价于 `-policy foreign-car`。该参数在 `-live` 与 `-offline` 模式下均可使用。
@@ -78,7 +67,7 @@ Flags:
 
 ### 默认数据库
 
-- 实时检测默认库：`assets/mmdb/GeoIP2-CN-20250318.mmdb`
+- 实时检测默认库：`assets/mmdb/GeoIP2-CN-20260307.mmdb`
 - 离线检测默认库：`assets/mmdb/GeoLite2-City-250626-V01.mmdb`
 
 ### 常用命令
@@ -86,7 +75,7 @@ Flags:
 实时检测示例：
 
 ```bash
-# 按默认实时模式启动
+# 启动实时检测
 /path/to/paasau
 # 按国内车型策略启动实时检测
 /path/to/paasau -policy china-car
@@ -101,7 +90,7 @@ Flags:
 # 仅定位指定模式的进程名
 /path/to/paasau -pn "adb|curl|python"
 # 指定实时检测数据库
-/path/to/paasau -db /path/to/mmdb/GeoIP2-CN.mmdb
+/path/to/paasau -db /path/to/mmdb/GeoIP2-CN-20260307.mmdb
 ```
 
 离线检测示例：
