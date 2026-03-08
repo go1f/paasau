@@ -4,7 +4,7 @@
 
 ## 快速上手
 
-默认情况下直接执行实时检测；如需离线分析，可使用 `-offline`。
+默认情况下直接执行实时检测；如需离线分析，可使用 `-offline`。Windows 构建仅保留离线能力，直接执行时按离线模式处理。
 
 ### 查看帮助
 
@@ -49,6 +49,8 @@ Flags:
   -foreign         Compatibility alias for -policy foreign-car
   -db <file>       GeoIP MMDB path
 ```
+
+Windows 构建说明：`paasau_windows_amd64.exe` 默认按离线模式运行，可直接写成 `paasau_windows_amd64.exe C:\\path\\to\\pcap_dump`，无需额外指定 `-offline`。
 
 - `-config`：指定配置文件，默认 `configs/default.json`。
 - `-policy`：指定策略名，例如 `china-car` 或 `foreign-car`。
@@ -106,6 +108,8 @@ Flags:
 /path/to/paasau -offline -foreign /path/to/pcap_dump
 # 指定离线扫描数据库
 /path/to/paasau -offline -db /path/to/mmdb/GeoLite2-City-250626-V01.mmdb /path/to/pcap_dump
+# Windows 离线构建可直接扫描目录
+/path/to/paasau_windows_amd64.exe /path/to/pcap_dump
 ```
 
 离线模式会递归扫描目录下的 `.pcap` 和 `.pcapng` 文件，并输出命中的违规公网 IP。

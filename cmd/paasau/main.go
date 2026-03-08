@@ -19,41 +19,65 @@ import (
 const defaultConfigPath = "configs/default.json"
 
 func main() {
-	if len(os.Args) < 2 {
-		if !liveSupported() {
-			printRootUsage()
-			return
-		}
-		runLive(nil)
-		return
-	}
-
-	switch os.Args[1] {
-	case "live", "-live":
-		runLive(os.Args[2:])
-	case "offline", "-offline":
-		runOffline(os.Args[2:])
-	case "-h", "--help", "help":
-		printRootUsage()
+	mode, args := normalizeModeArgs(os.Args[1:])
+	switch mode {
 	case "":
 		if !liveSupported() {
-			printRootUsage()
-			return
-		}
-		runLive(nil)
-	default:
-		if strings.HasPrefix(os.Args[1], "-") {
-			if !liveSupported() {
-				fmt.Fprintln(os.Stderr, "live capture is not supported in Windows builds; use the offline subcommand instead")
+			if len(args) == 0 {
 				printRootUsage()
-				os.Exit(2)
+				return
 			}
-			runLive(os.Args[1:])
+			runOffline(args)
 			return
 		}
-		fmt.Fprintf(os.Stderr, "unknown subcommand: %s\n\n", os.Args[1])
+		if len(args) == 0 {
+			runLive(nil)
+			return
+		}
+		switch args[0] {
+		case "-h", "--help", "help":
+			printRootUsage()
+		default:
+			if strings.HasPrefix(args[0], "-") {
+				if !liveSupported() {
+					fmt.Fprintln(os.Stderr, "live capture is not supported in Windows builds; use the offline subcommand instead")
+					printRootUsage()
+					os.Exit(2)
+				}
+				runLive(args)
+				return
+			}
+			fmt.Fprintf(os.Stderr, "unknown subcommand: %s\n\n", args[0])
+			printRootUsage()
+			os.Exit(2)
+		}
+	case "live":
+		runLive(args)
+	case "offline":
+		runOffline(args)
+	case "help":
+		if !liveSupported() {
+			fmt.Fprint(os.Stdout, offlineUsageString(os.Args[0]))
+			return
+		}
 		printRootUsage()
-		os.Exit(2)
+	}
+}
+
+func normalizeModeArgs(args []string) (string, []string) {
+	if len(args) == 0 {
+		return "", nil
+	}
+
+	switch args[0] {
+	case "live", "-live", "--live":
+		return "live", args[1:]
+	case "offline", "-offline", "--offline":
+		return "offline", args[1:]
+	case "-h", "--help", "help":
+		return "help", nil
+	default:
+		return "", args
 	}
 }
 

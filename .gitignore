@@ -1,5 +1,6 @@
 .DS_Store
 .gocache/
+.gomodcache/
 .gocache-orb/
 backup/
 dist/

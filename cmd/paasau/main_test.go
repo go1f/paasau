@@ -93,3 +93,46 @@ func TestRootUsageUsesHyphenModeNames(t *testing.T) {
 		}
 	}
 }
+
+func TestNormalizeModeArgsSupportsSingleAndDoubleDashAliases(t *testing.T) {
+	tests := []struct {
+		name     string
+		args     []string
+		wantMode string
+		wantArgs []string
+	}{
+		{name: "live word", args: []string{"live", "-who"}, wantMode: "live", wantArgs: []string{"-who"}},
+		{name: "live single dash", args: []string{"-live", "-who"}, wantMode: "live", wantArgs: []string{"-who"}},
+		{name: "live double dash", args: []string{"--live", "-who"}, wantMode: "live", wantArgs: []string{"-who"}},
+		{name: "offline word", args: []string{"offline", "pcap"}, wantMode: "offline", wantArgs: []string{"pcap"}},
+		{name: "offline single dash", args: []string{"-offline", "pcap"}, wantMode: "offline", wantArgs: []string{"pcap"}},
+		{name: "offline double dash", args: []string{"--offline", "pcap"}, wantMode: "offline", wantArgs: []string{"pcap"}},
+		{name: "help", args: []string{"--help"}, wantMode: "help"},
+		{name: "default live flags", args: []string{"-who"}, wantMode: "", wantArgs: []string{"-who"}},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			gotMode, gotArgs := normalizeModeArgs(tt.args)
+			if gotMode != tt.wantMode {
+				t.Fatalf("mode = %q, want %q", gotMode, tt.wantMode)
+			}
+			if strings.Join(gotArgs, "\x00") != strings.Join(tt.wantArgs, "\x00") {
+				t.Fatalf("args = %v, want %v", gotArgs, tt.wantArgs)
+			}
+		})
+	}
+}
+
+func TestRootUsageWindowsShowsOfflineDefault(t *testing.T) {
+	usage := rootUsageStringForMode("paasau.exe", false)
+	required := []string{
+		"Default behavior: paasau.exe -offline <pcap-dir>",
+		"paasau.exe -offline ./pcap_dump",
+	}
+	for _, item := range required {
+		if !strings.Contains(usage, item) {
+			t.Fatalf("usage missing %q:\n%s", item, usage)
+		}
+	}
+}
