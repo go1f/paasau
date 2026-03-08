@@ -62,6 +62,7 @@ func runLive(args []string) {
 	fs := flag.NewFlagSet("live", flag.ExitOnError)
 	configPath := fs.String("config", defaultConfigPath, "Path to config file")
 	policyName := fs.String("policy", "", "Policy name from config")
+	foreign := fs.Bool("foreign", false, "Switch to foreign-car policy for compatibility")
 	interfacesFlag := fs.String("i", "", "Comma-separated interfaces")
 	outputDir := fs.String("o", "", "Output directory for logs and captures")
 	geoIPDB := fs.String("db", "", "GeoIP MMDB file path")
@@ -79,6 +80,7 @@ func runLive(args []string) {
 		exitErr(err)
 	}
 	applyTimeZone(cfg.Runtime.TimeZone)
+	*policyName = resolvePolicyName(*policyName, *foreign)
 
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
@@ -102,6 +104,7 @@ func runOffline(args []string) {
 	fs := flag.NewFlagSet("offline", flag.ExitOnError)
 	configPath := fs.String("config", defaultConfigPath, "Path to config file")
 	policyName := fs.String("policy", "", "Policy name from config")
+	foreign := fs.Bool("foreign", false, "Switch to foreign-car policy for compatibility")
 	geoIPDB := fs.String("db", "", "GeoIP MMDB file path")
 	fs.Usage = func() {
 		fmt.Fprint(fs.Output(), offlineUsageString(os.Args[0]))
@@ -118,6 +121,7 @@ func runOffline(args []string) {
 		exitErr(err)
 	}
 	applyTimeZone(cfg.Runtime.TimeZone)
+	*policyName = resolvePolicyName(*policyName, *foreign)
 
 	opts := offline.Options{
 		PolicyName: *policyName,
@@ -235,6 +239,7 @@ func liveUsageString(program string) string {
 	return commandUsageString(program, "live", "[flags]", []flagLine{
 		{name: "-config", arg: "<file>", desc: "Path to config file"},
 		{name: "-policy", arg: "<name>", desc: "Policy name from config"},
+		{name: "-foreign", desc: "Compatibility alias for -policy foreign-car"},
 		{name: "-i", arg: "<if0,if1>", desc: "Comma-separated interfaces"},
 		{name: "-o", arg: "<dir>", desc: "Output directory for logs and captures"},
 		{name: "-db", arg: "<file>", desc: "GeoIP MMDB file path"},
@@ -249,6 +254,7 @@ func offlineUsageString(program string) string {
 	return commandUsageString(program, "offline", "[flags] <pcap-dir>", []flagLine{
 		{name: "-config", arg: "<file>", desc: "Path to config file"},
 		{name: "-policy", arg: "<name>", desc: "Policy name from config"},
+		{name: "-foreign", desc: "Compatibility alias for -policy foreign-car"},
 		{name: "-db", arg: "<file>", desc: "GeoIP MMDB file path"},
 	})
 }
@@ -312,4 +318,11 @@ func commandUsageString(program string, subcommand string, suffix string, lines 
 
 func liveSupported() bool {
 	return runtime.GOOS != "windows"
+}
+
+func resolvePolicyName(policyName string, foreign bool) string {
+	if foreign && strings.TrimSpace(policyName) == "" {
+		return "foreign-car"
+	}
+	return policyName
 }

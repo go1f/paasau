@@ -45,6 +45,7 @@ func TestLiveUsageListsCommonFlags(t *testing.T) {
 	required := []string{
 		"Usage: paasau live [flags]",
 		"-config <file>",
+		"-foreign",
 		"-save",
 		"-who",
 		"paasau -i wlan0 -who",
@@ -62,7 +63,19 @@ func TestOfflineUsageListsInputDirectory(t *testing.T) {
 	if !strings.Contains(usage, "Usage: paasau offline [flags] <pcap-dir>") {
 		t.Fatalf("unexpected usage:\n%s", usage)
 	}
+	if !strings.Contains(usage, "-foreign") {
+		t.Fatalf("missing foreign compatibility flag:\n%s", usage)
+	}
 	if !strings.Contains(usage, "paasau offline ./pcap_dump") {
 		t.Fatalf("missing example:\n%s", usage)
+	}
+}
+
+func TestResolvePolicyNameKeepsCompatibilityForeignSwitch(t *testing.T) {
+	if got := resolvePolicyName("", true); got != "foreign-car" {
+		t.Fatalf("expected foreign-car, got %q", got)
+	}
+	if got := resolvePolicyName("china-car", true); got != "china-car" {
+		t.Fatalf("explicit policy should win, got %q", got)
 	}
 }
