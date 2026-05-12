@@ -7,6 +7,7 @@ import (
 	"strings"
 	"time"
 
+	embedded "paasau"
 	"paasau/internal/config"
 	"paasau/internal/detect"
 	"paasau/internal/geoip"
@@ -24,8 +25,7 @@ func Run(cfg *config.Config, opts Options) error {
 		return err
 	}
 
-	dbPath := pickString(opts.GeoIPDB, cfg.Offline.GeoIPDB)
-	reader, err := geoip.Open(dbPath)
+	reader, dbName, err := openOfflineGeoIPDB(opts.GeoIPDB, cfg.Offline.GeoIPDB)
 	if err != nil {
 		return err
 	}
@@ -40,7 +40,7 @@ func Run(cfg *config.Config, opts Options) error {
 		return fmt.Errorf("no pcap files found under %s", opts.InputDir)
 	}
 
-	fmt.Printf("Scanning %d file(s) with policy=%s db=%s\n\n", len(pcapFiles), policyName, dbPath)
+	fmt.Printf("Scanning %d file(s) with policy=%s db=%s\n\n", len(pcapFiles), policyName, dbName)
 
 	for _, pcapFile := range pcapFiles {
 		fmt.Printf("Handling %s:\n", pcapFile)
@@ -80,4 +80,20 @@ func pickString(override string, fallback string) string {
 		return override
 	}
 	return fallback
+}
+
+func openOfflineGeoIPDB(override string, configured string) (*geoip.Reader, string, error) {
+	dbPath := pickString(override, configured)
+	if strings.TrimSpace(dbPath) != "" {
+		reader, err := geoip.Open(dbPath)
+		return reader, dbPath, err
+	}
+
+	bytes, err := embedded.DefaultOfflineGeoIPDB()
+	if err != nil {
+		return nil, "", fmt.Errorf("read embedded offline geoip db: %w", err)
+	}
+	name := "embedded:" + embedded.DefaultOfflineGeoIPPath
+	reader, err := geoip.OpenBytes(name, bytes)
+	return reader, name, err
 }

@@ -52,12 +52,12 @@ Flags:
 
 Windows 构建说明：`paasau_windows_amd64.exe` 默认按离线模式运行，可直接写成 `paasau_windows_amd64.exe C:\\path\\to\\pcap_dump`，无需额外指定 `-offline`。
 
-- `-config`：指定配置文件，默认 `configs/default.json`。
+- `-config`：指定外部配置文件；不指定时使用编译进二进制的内嵌默认配置。
 - `-policy`：指定策略名，例如 `china-car` 或 `foreign-car`。
 - `-foreign`：兼容旧版本参数，等价于 `-policy foreign-car`。该参数在 `-live` 与 `-offline` 模式下均可使用。
 - `-i`：指定抓包网卡；多个网卡使用逗号分隔。
 - `-o`：指定运行输出目录。
-- `-db`：指定数据库文件路径。
+- `-db`：指定外部数据库文件路径；不指定时使用编译进二进制的内嵌默认数据库。
 - `-save`：保存抓到的 `.pcap` 文件。
 - `-who`：启用违规连接的进程定位。
 - `-pn`：仅定位匹配正则表达式的进程名。
@@ -67,10 +67,12 @@ Windows 构建说明：`paasau_windows_amd64.exe` 默认按离线模式运行，
 - `china-car`：仅允许中国大陆目的 IP。
 - `foreign-car`：禁止中国大陆目的 IP。
 
-### 默认数据库
+### 默认配置与数据库
 
-- 实时检测默认库：`assets/mmdb/GeoIP2-CN-20260307.mmdb`
-- 离线检测默认库：`assets/mmdb/GeoLite2-City-250626-V01.mmdb`
+- 默认配置已内嵌到二进制，不依赖运行目录下存在 `configs/default.json`。
+- 实时检测默认库已内嵌：`assets/mmdb/GeoIP2-CN-20260307.mmdb`
+- 离线检测默认库已内嵌：`assets/mmdb/GeoLite2-City-250626-V01.mmdb`
+- 如需覆盖默认值，可以继续使用 `-config` 指定配置文件，或使用 `-db` 指定外部 MMDB 文件。
 
 ### 常用命令
 
@@ -91,7 +93,7 @@ Windows 构建说明：`paasau_windows_amd64.exe` 默认按离线模式运行，
 /path/to/paasau -i eth0,wlan0
 # 仅定位指定模式的进程名
 /path/to/paasau -pn "adb|curl|python"
-# 指定实时检测数据库
+# 指定外部实时检测数据库
 /path/to/paasau -db /path/to/mmdb/GeoIP2-CN-20260307.mmdb
 ```
 
@@ -106,7 +108,7 @@ Windows 构建说明：`paasau_windows_amd64.exe` 默认按离线模式运行，
 /path/to/paasau -offline -policy foreign-car /path/to/pcap_dump
 # 使用旧版兼容参数执行海外车型离线扫描
 /path/to/paasau -offline -foreign /path/to/pcap_dump
-# 指定离线扫描数据库
+# 指定外部离线扫描数据库
 /path/to/paasau -offline -db /path/to/mmdb/GeoLite2-City-250626-V01.mmdb /path/to/pcap_dump
 # Windows 离线构建可直接扫描目录
 /path/to/paasau_windows_amd64.exe /path/to/pcap_dump
@@ -185,6 +187,36 @@ GOCACHE=$(pwd)/.gocache go build -o /path/to/paasau ./cmd/paasau
 ./scripts/build_orb_ubuntu.sh
 ```
 
+如果需要构建 ARM 目标：
+
+```bash
+./scripts/build_arm_targets.sh
+```
+
+该脚本默认产出 `dist/releases/paasau_linux_armv7`。如需 Android 原生 arm64/armv7 构建，可先配置 `ANDROID_NDK_HOME`，脚本会自动检测并构建对应产物。
+
+如果需要带 cgo/libpcap 的 Linux ARMv7 live 抓包构建，可使用 Orb Ubuntu 构建静态产物：
+
+```bash
+./scripts/build_orb_linux_armv7_cgo_live.sh
+```
+
+该脚本会在 Orb Ubuntu 中安装 armhf 交叉工具链，交叉编译精简静态 `libpcap`，并产出 `dist/releases/paasau_arm-linux-gnueabihf_static`。
+
+发布前构建 ARMv7、ARM EABI、aarch64 和 Windows amd64：
+
+```bash
+./scripts/build_release_targets.sh
+```
+
+该脚本会产出：
+
+- `dist/releases/paasau_arm-linux-gnueabihf_static`
+- `dist/releases/paasau_arm-linux-gnueabi_static`
+- `dist/releases/paasau_aarch64-linux-gnu_static`
+- `dist/releases/paasau_windows_amd64.exe`
+- `dist/releases/SHA256SUMS`
+
 验证整个当前模块可构建：
 
 ```bash
@@ -193,7 +225,7 @@ GOCACHE=$(pwd)/.gocache go build ./...
 
 ## 配置文件
 
-默认配置文件是 `configs/default.json`。
+默认配置已编译进二进制，工具运行时不强依赖本地配置文件。仓库中的 `configs/default.json` 是默认配置模板，也可作为 `-config` 的外部覆盖文件。
 
 当前配置拆成三类：
 
@@ -203,7 +235,7 @@ GOCACHE=$(pwd)/.gocache go build ./...
   - 时区
 - `live`
   - 默认策略
-  - MMDB 路径
+  - MMDB 路径（为空时使用内嵌默认库）
   - 默认 BPF 过滤器
   - 进程定位 worker 数
   - 超时时间
@@ -255,9 +287,9 @@ GOCACHE=$(pwd)/.gocache go build ./...
 ### 实时检测
 
 - 自动枚举所有处于 UP 状态的非回环网卡
-- 使用配置文件中的默认 BPF 过滤器抓取 IPv4 流量
+- 使用内嵌默认配置或外部配置中的 BPF 过滤器抓取 IPv4 流量
 - 过滤私网、回环、多播、链路本地、广播等地址
-- 基于 MMDB 读取目的 IP 国家码
+- 基于内嵌默认 MMDB 或外部指定 MMDB 读取目的 IP 国家码
 - 按策略判断是否违规
 - 可选保存抓包
 - 可选使用 `gopsutil` 尝试定位发起连接的进程

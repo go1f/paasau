@@ -20,6 +20,14 @@ func Open(path string) (*Reader, error) {
 	return &Reader{reader: reader}, nil
 }
 
+func OpenBytes(name string, bytes []byte) (*Reader, error) {
+	reader, err := geoip2.FromBytes(bytes)
+	if err != nil {
+		return nil, fmt.Errorf("open embedded geoip db %s: %w", name, err)
+	}
+	return &Reader{reader: reader}, nil
+}
+
 func (r *Reader) Close() error {
 	return r.reader.Close()
 }

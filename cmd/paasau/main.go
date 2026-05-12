@@ -10,13 +10,14 @@ import (
 	"strings"
 	"syscall"
 	"time"
+	_ "time/tzdata"
 
 	"paasau/internal/config"
 	"paasau/internal/live"
 	"paasau/internal/offline"
 )
 
-const defaultConfigPath = "configs/default.json"
+const configFlagDefault = ""
 
 func main() {
 	mode, args := normalizeModeArgs(os.Args[1:])
@@ -83,7 +84,7 @@ func normalizeModeArgs(args []string) (string, []string) {
 
 func runLive(args []string) {
 	fs := flag.NewFlagSet("live", flag.ExitOnError)
-	configPath := fs.String("config", defaultConfigPath, "Path to config file")
+	configPath := fs.String("config", configFlagDefault, "Path to config file")
 	policyName := fs.String("policy", "", "Policy name from config")
 	foreign := fs.Bool("foreign", false, "Switch to foreign-car policy for compatibility")
 	interfacesFlag := fs.String("i", "", "Comma-separated interfaces")
@@ -97,7 +98,7 @@ func runLive(args []string) {
 	}
 	fs.Parse(args)
 
-	cfg, err := config.Load(*configPath)
+	cfg, err := loadConfig(*configPath)
 	if err != nil {
 		exitErr(err)
 	}
@@ -123,7 +124,7 @@ func runLive(args []string) {
 
 func runOffline(args []string) {
 	fs := flag.NewFlagSet("offline", flag.ExitOnError)
-	configPath := fs.String("config", defaultConfigPath, "Path to config file")
+	configPath := fs.String("config", configFlagDefault, "Path to config file")
 	policyName := fs.String("policy", "", "Policy name from config")
 	foreign := fs.Bool("foreign", false, "Switch to foreign-car policy for compatibility")
 	geoIPDB := fs.String("db", "", "GeoIP MMDB file path")
@@ -137,7 +138,7 @@ func runOffline(args []string) {
 		os.Exit(2)
 	}
 
-	cfg, err := config.Load(*configPath)
+	cfg, err := loadConfig(*configPath)
 	if err != nil {
 		exitErr(err)
 	}
@@ -181,6 +182,13 @@ func applyTimeZone(name string) {
 	time.Local = loc
 }
 
+func loadConfig(path string) (*config.Config, error) {
+	if strings.TrimSpace(path) == "" {
+		return config.LoadDefault()
+	}
+	return config.Load(path)
+}
+
 func printRootUsage() {
 	fmt.Print(rootUsageString(os.Args[0]))
 }
@@ -213,9 +221,7 @@ func rootUsageStringForMode(program string, liveAvailable bool) string {
 		b.WriteString("  -live      Not supported in Windows builds\n")
 	}
 	b.WriteString("  -offline   Scan pcap files in a directory\n\n")
-	b.WriteString("Config default: ")
-	b.WriteString(defaultConfigPath)
-	b.WriteString("\n\n")
+	b.WriteString("Config default: embedded built-in config; use -config to override\n\n")
 	if liveAvailable {
 		b.WriteString("Live flags:\n")
 		b.WriteString("  -config <file>   Config file path\n")

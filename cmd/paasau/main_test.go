@@ -1,6 +1,9 @@
 package main
 
 import (
+	"os"
+	"os/exec"
+	"path/filepath"
 	"strings"
 	"testing"
 )
@@ -133,6 +136,47 @@ func TestRootUsageWindowsShowsOfflineDefault(t *testing.T) {
 	for _, item := range required {
 		if !strings.Contains(usage, item) {
 			t.Fatalf("usage missing %q:\n%s", item, usage)
+		}
+	}
+}
+
+func TestOfflineUsesEmbeddedDefaultsFromNonRepoWorkingDirectory(t *testing.T) {
+	if os.Getenv("PAASAU_TEST_HELPER_MAIN") == "1" {
+		for i, arg := range os.Args {
+			if arg == "--" {
+				os.Args = append([]string{os.Args[0]}, os.Args[i+1:]...)
+				break
+			}
+		}
+		main()
+		return
+	}
+
+	dir := t.TempDir()
+	pcapDir := filepath.Join(dir, "empty-pcaps")
+	if err := os.MkdirAll(pcapDir, 0o755); err != nil {
+		t.Fatalf("create pcap dir: %v", err)
+	}
+
+	cmd := exec.Command(os.Args[0], "-test.run=TestOfflineUsesEmbeddedDefaultsFromNonRepoWorkingDirectory", "--", "-offline", pcapDir)
+	cmd.Dir = dir
+	cmd.Env = append(os.Environ(), "PAASAU_TEST_HELPER_MAIN=1")
+	output, err := cmd.CombinedOutput()
+	if err == nil {
+		t.Fatalf("expected helper process to exit non-zero for empty pcap dir, output:\n%s", output)
+	}
+
+	text := string(output)
+	if !strings.Contains(text, "no pcap files found under "+pcapDir) {
+		t.Fatalf("expected empty pcap error, got:\n%s", text)
+	}
+	for _, unexpected := range []string{
+		"read config",
+		"open geoip db",
+		"no such file or directory",
+	} {
+		if strings.Contains(text, unexpected) {
+			t.Fatalf("unexpected %q in output:\n%s", unexpected, text)
 		}
 	}
 }

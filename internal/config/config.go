@@ -6,6 +6,8 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+
+	embedded "paasau"
 )
 
 type Config struct {
@@ -58,16 +60,30 @@ func Load(path string) (*Config, error) {
 		return nil, fmt.Errorf("read config %s: %w", path, err)
 	}
 
+	return loadBytes(path, path, bytes, true)
+}
+
+func LoadDefault() (*Config, error) {
+	bytes, err := embedded.DefaultConfig()
+	if err != nil {
+		return nil, fmt.Errorf("read embedded config: %w", err)
+	}
+	return loadBytes("embedded:"+embedded.DefaultConfigPath, embedded.DefaultConfigPath, bytes, true)
+}
+
+func loadBytes(name string, configPath string, bytes []byte, resolvePaths bool) (*Config, error) {
 	var cfg Config
 	if err := json.Unmarshal(bytes, &cfg); err != nil {
-		return nil, fmt.Errorf("parse config %s: %w", path, err)
+		return nil, fmt.Errorf("parse config %s: %w", name, err)
 	}
 
 	cfg.applyDefaults()
-	cfg.resolveRelativePaths(path)
+	if resolvePaths {
+		cfg.resolveRelativePaths(configPath)
+	}
 
 	if len(cfg.Policies) == 0 {
-		return nil, fmt.Errorf("config %s: policies must not be empty", path)
+		return nil, fmt.Errorf("config %s: policies must not be empty", name)
 	}
 
 	return &cfg, nil

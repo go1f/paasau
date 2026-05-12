@@ -18,6 +18,7 @@ import (
 	"github.com/google/gopacket/pcapgo"
 	"github.com/shirou/gopsutil/process"
 
+	embedded "paasau"
 	"paasau/internal/cache"
 	"paasau/internal/config"
 	"paasau/internal/detect"
@@ -68,8 +69,7 @@ func Run(ctx context.Context, cfg *config.Config, opts Options) error {
 	}
 	defer loggers.Close()
 
-	dbPath := pickString(opts.GeoIPDB, cfg.Live.GeoIPDB)
-	reader, err := geoip.Open(dbPath)
+	reader, dbName, err := openLiveGeoIPDB(opts.GeoIPDB, cfg.Live.GeoIPDB)
 	if err != nil {
 		return err
 	}
@@ -114,7 +114,7 @@ func Run(ctx context.Context, cfg *config.Config, opts Options) error {
 	}
 
 	loggers.Info.Printf("Policy: %s", policyName)
-	loggers.Info.Printf("GeoIP DB: %s", dbPath)
+	loggers.Info.Printf("GeoIP DB: %s", dbName)
 	loggers.Info.Printf("BPF filter: %s", r.filter)
 	loggers.Info.Printf("Press Ctrl-C to stop live capture")
 
@@ -223,6 +223,22 @@ func pickString(override string, fallback string) string {
 		return override
 	}
 	return fallback
+}
+
+func openLiveGeoIPDB(override string, configured string) (*geoip.Reader, string, error) {
+	dbPath := pickString(override, configured)
+	if strings.TrimSpace(dbPath) != "" {
+		reader, err := geoip.Open(dbPath)
+		return reader, dbPath, err
+	}
+
+	bytes, err := embedded.DefaultLiveGeoIPDB()
+	if err != nil {
+		return nil, "", fmt.Errorf("read embedded live geoip db: %w", err)
+	}
+	name := "embedded:" + embedded.DefaultLiveGeoIPDBPath
+	reader, err := geoip.OpenBytes(name, bytes)
+	return reader, name, err
 }
 
 type processFinder struct {
